@@ -592,6 +592,39 @@ export interface ReconGroup {
   explanation: string
 }
 
+export interface ReconFieldDiff {
+  field: string
+  source: string | number | null
+  target: string | number | null
+}
+
+export interface ReconRef {
+  system: string
+  table: string
+  note?: string
+  route?: string
+}
+
+export interface ReconRow {
+  key: string
+  source: string
+  target: string
+  status: 'Match' | 'Differs' | 'Missing'
+  /** Field by field, so the row can explain itself. */
+  fields?: ReconFieldDiff[]
+  /** Why the two sides disagree. */
+  reason?: string
+  /** What to do about it. */
+  fix?: string
+  /** A difference that is correct by design, not a defect. */
+  expected?: boolean
+  sourceRef?: ReconRef
+  targetRef?: ReconRef
+  /** Follow the business key through every system. */
+  traceKey?: string
+  link?: { label: string; route: string }
+}
+
 export interface ReconSet {
   id: string
   name: string
@@ -604,7 +637,9 @@ export interface ReconSet {
   targetTotal: string
   matchPct: number
   groups: ReconGroup[]
-  sample: { key: string; source: string; target: string; status: 'Match' | 'Differs' | 'Missing' }[]
+  sample: ReconRow[]
+  /** Cross-system sets read the live plant instead of a stored sample. */
+  liveSource?: 'batches' | 'invoices'
 }
 
 export const RECON_SETS: ReconSet[] = [
@@ -624,10 +659,73 @@ export const RECON_SETS: ReconSet[] = [
       { reason: 'Rounding on the unit price', rows: 2, explanation: 'Two orders differ by less than one euro because the legacy price carried four decimals.' },
     ],
     sample: [
-      { key: '4500012044', source: '€ 128 400', target: '€ 128 400', status: 'Match' },
-      { key: '4500012051', source: '€ 96 120', target: '€ 96 119', status: 'Differs' },
-      { key: '4500012077', source: '€ 42 000', target: '—', status: 'Missing' },
-      { key: '4500012080', source: '€ 311 500', target: '€ 311 500', status: 'Match' },
+      {
+        key: '4500012044',
+        source: '€ 128 400',
+        target: '€ 128 400',
+        status: 'Match',
+        fields: [
+          { field: 'purchase order', source: '4500012044', target: '4500012044' },
+          { field: 'vendor', source: 'VEND-1042', target: 'VEND-1042' },
+          { field: 'material', source: 'SCRAP-STEEL-MIX', target: 'SCRAP-STEEL-MIX' },
+          { field: 'open quantity', source: '64 200 kg', target: '64 200 kg' },
+          { field: 'net value', source: '€ 128 400', target: '€ 128 400' },
+          { field: 'currency', source: 'EUR', target: 'EUR' },
+        ],
+        sourceRef: { system: 'Legacy ERP', table: 'ZEKPO_20260930.csv', note: 'extract taken 30 Sep 2026 at 23:10' },
+        targetRef: { system: 'SAP S/4HANA – Steel', table: 'sap.ekpo', note: 'loaded 01 Oct 2026' },
+      },
+      {
+        key: '4500012051',
+        source: '€ 96 120',
+        target: '€ 96 119',
+        status: 'Differs',
+        expected: true,
+        fields: [
+          { field: 'purchase order', source: '4500012051', target: '4500012051' },
+          { field: 'vendor', source: 'VEND-1043', target: 'VEND-1043' },
+          { field: 'open quantity', source: '48 060 kg', target: '48 060 kg' },
+          { field: 'unit price', source: '2 000.4167 EUR/t', target: '2 000.42 EUR/t' },
+          { field: 'net value', source: '€ 96 120', target: '€ 96 119' },
+        ],
+        reason:
+          'The legacy system held the unit price to four decimals; S/4 holds two. Rounding 2 000.4167 to 2 000.42 moves the net value by one euro.',
+        fix: 'Accepted and documented under the rounding group. No correction is made, because the S/4 value is the one the supplier will be paid against.',
+        sourceRef: { system: 'Legacy ERP', table: 'ZEKPO_20260930.csv', note: 'field NETWR, 4 decimals' },
+        targetRef: { system: 'SAP S/4HANA – Steel', table: 'sap.ekpo', note: 'field NETWR, 2 decimals' },
+      },
+      {
+        key: '4500012077',
+        source: '€ 42 000',
+        target: '—',
+        status: 'Missing',
+        expected: true,
+        fields: [
+          { field: 'purchase order', source: '4500012077', target: null },
+          { field: 'vendor', source: 'VEND-1044', target: null },
+          { field: 'status in source', source: 'Closed 02 Oct 2026', target: null },
+          { field: 'net value', source: '€ 42 000', target: null },
+        ],
+        reason:
+          'The order was completed in the legacy system on 2 October, two days after the extract was taken and before the load ran. It was correctly left out of the target.',
+        fix: 'No action. The migration rule is to load open orders only, and this one was no longer open when it loaded.',
+        sourceRef: { system: 'Legacy ERP', table: 'ZEKPO_20260930.csv', note: 'row present in the extract' },
+        targetRef: { system: 'SAP S/4HANA – Steel', table: 'sap.ekpo', note: 'no row, by design' },
+      },
+      {
+        key: '4500012080',
+        source: '€ 311 500',
+        target: '€ 311 500',
+        status: 'Match',
+        fields: [
+          { field: 'purchase order', source: '4500012080', target: '4500012080' },
+          { field: 'vendor', source: 'VEND-1045', target: 'VEND-1045' },
+          { field: 'open quantity', source: '142 500 kg', target: '142 500 kg' },
+          { field: 'net value', source: '€ 311 500', target: '€ 311 500' },
+        ],
+        sourceRef: { system: 'Legacy ERP', table: 'ZEKPO_20260930.csv' },
+        targetRef: { system: 'SAP S/4HANA – Steel', table: 'sap.ekpo' },
+      },
     ],
   },
   {
@@ -645,12 +743,8 @@ export const RECON_SETS: ReconSet[] = [
       { reason: 'Unit sent as TON', rows: 28, explanation: 'The quantity is right but the unit says TON, so the warehouse total is understated.' },
       { reason: 'Warehouse split RAW1 / RAW2', rows: 5, explanation: 'Postings landed in RAW while the new split expects RAW1 or RAW2.' },
     ],
-    sample: [
-      { key: 'BT-00412', source: '18 240 kg', target: '18 240 KG', status: 'Match' },
-      { key: 'BT-00418', source: '22 100 kg', target: '22 100 TON', status: 'Differs' },
-      { key: 'BT-00421', source: '9 860 kg', target: '9 860 KG', status: 'Match' },
-      { key: 'BT-00430', source: '31 020 kg', target: '31 020 TON', status: 'Differs' },
-    ],
+    liveSource: 'batches',
+    sample: [],
   },
   {
     id: 'RS-03',
@@ -665,8 +759,34 @@ export const RECON_SETS: ReconSet[] = [
     matchPct: 100,
     groups: [],
     sample: [
-      { key: 'VEND-1042', source: 'Active', target: 'Active', status: 'Match' },
-      { key: 'VEND-1043', source: 'Active', target: 'Active', status: 'Match' },
+      {
+        key: 'VEND-1042',
+        source: 'Active',
+        target: 'Active',
+        status: 'Match',
+        fields: [
+          { field: 'vendor', source: 'VEND-1042', target: 'VEND-1042' },
+          { field: 'status', source: 'Active', target: 'Active' },
+          { field: 'payment terms', source: '30 days net', target: '30 days net' },
+          { field: 'bank account', source: 'masked', target: 'masked' },
+        ],
+        sourceRef: { system: 'Legacy ERP', table: 'ZLFA1_20260930.csv' },
+        targetRef: { system: 'SAP S/4HANA – Steel', table: 'sap.lfa1' },
+      },
+      {
+        key: 'VEND-1043',
+        source: 'Active',
+        target: 'Active',
+        status: 'Match',
+        fields: [
+          { field: 'vendor', source: 'VEND-1043', target: 'VEND-1043' },
+          { field: 'status', source: 'Active', target: 'Active' },
+          { field: 'payment terms', source: '45 days net', target: '45 days net' },
+          { field: 'bank account', source: 'masked', target: 'masked' },
+        ],
+        sourceRef: { system: 'Legacy ERP', table: 'ZLFA1_20260930.csv' },
+        targetRef: { system: 'SAP S/4HANA – Steel', table: 'sap.lfa1' },
+      },
     ],
   },
   {
@@ -683,10 +803,8 @@ export const RECON_SETS: ReconSet[] = [
     groups: [
       { reason: 'Parked invoices not yet paid', rows: 12, explanation: 'Correct behaviour: parked invoices are excluded from the payment file.' },
     ],
-    sample: [
-      { key: '5100004412', source: '€ 42 180', target: '€ 42 180', status: 'Match' },
-      { key: '5100004419', source: '€ 18 900', target: '—', status: 'Missing' },
-    ],
+    liveSource: 'invoices',
+    sample: [],
   },
 ]
 

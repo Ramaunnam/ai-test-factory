@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, GitCompareArrows, Play, Sparkles, X } from 'lucide-react'
+import { ArrowRight, Check, Database, GitCompareArrows, Play, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   Badge,
@@ -22,11 +22,14 @@ import {
 import { PageHeader } from '@/app/PageHeader'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
-import { CHANGES, HEALING, PROCESSES, RECON_SETS, RUNS, SCENARIOS, SYSTEMS } from '@/data'
+import { CHANGES, HEALING, PROCESSES, RECON_SETS, RUNS, SCENARIOS, SYSTEMS, type ReconRow, type ReconSet } from '@/data'
+import { engine } from '@/sim/engine'
+import { useSimVersion } from '@/sim/useSim'
+import { useDrawer } from '@/providers/DrawerProvider'
 import { store, useStore } from '@/data/appStore'
 import { useToast } from '@/providers/ToastProvider'
 import { useRole } from '@/providers/RoleProvider'
-import { num } from '@/lib/format'
+import { fmtSim, num } from '@/lib/format'
 
 const TABS = [
   { label: 'Change Impact', path: '/regression' },
@@ -392,15 +395,266 @@ export function SelfHealingPage() {
 /* Reconciliation                                                             */
 /* -------------------------------------------------------------------------- */
 
+/** The two cross-system sets compare the live plant, not a stored sample. */
+function liveBatchRows(): ReconRow[] {
+  const db = engine.db
+  return db.scrap_batch
+    .slice(-14)
+    .reverse()
+    .map((b) => {
+      const posting = db.stock_posting.find((p) => p.batch === b.batch)
+      const receipt = db.receipt.find((r) => r.receipt === b.receipt)
+      const wrongUnit = !!posting && posting.unit !== 'KG'
+      const wrongQty = !!posting && Math.abs(posting.qty - b.weight_kg) > 1
+      const status: ReconRow['status'] = !posting ? 'Missing' : wrongUnit || wrongQty ? 'Differs' : 'Match'
+      return {
+        key: b.batch,
+        source: `${num(b.weight_kg)} kg`,
+        target: posting ? `${num(posting.qty)} ${posting.unit}` : '—',
+        status,
+        fields: [
+          { field: 'batch', source: b.batch, target: posting?.batch ?? null },
+          { field: 'grade / item', source: b.grade, target: posting?.item ?? null },
+          { field: 'quantity', source: b.weight_kg, target: posting?.qty ?? null },
+          { field: 'unit', source: 'KG', target: posting?.unit ?? null },
+          { field: 'warehouse', source: 'RAW', target: posting?.warehouse ?? null },
+          { field: 'journal', source: '—', target: posting?.journal ?? null },
+          { field: 'recorded', source: fmtSim(b.created), target: posting ? fmtSim(posting.posted) : null },
+        ],
+        reason: !posting
+          ? 'Nothing was posted to D365 for this batch, so the yard holds material the warehouse does not know about.'
+          : wrongUnit
+            ? `The quantity is right but the unit says ${posting.unit}. D365 understates this batch by a factor of a thousand, and the warehouse total with it. The message arrived that way on IF-03.`
+            : wrongQty
+              ? 'The posted quantity does not match the weight the yard recorded for this batch.'
+              : undefined,
+        fix: !posting
+          ? 'Re-send the stock posting on IF-03 and check the queue for a lost message.'
+          : wrongUnit
+            ? 'This is fault F6 on IF-03. Switch it off on Live Data Flow, then re-post the journal. Live check C6 watches for it.'
+            : wrongQty
+              ? 'Compare the sortation record with the journal and correct the posting.'
+              : undefined,
+        sourceRef: {
+          system: 'Scrap Yard Operations',
+          table: 'scrap.scrap_batch',
+          note: `sorted from receipt ${b.receipt}`,
+          route: '/flow/data?system=scrap&table=scrap_batch',
+        },
+        targetRef: {
+          system: 'D365 F&O – Recycling',
+          table: 'd365.stock_posting',
+          note: posting ? `journal ${posting.journal}, posted ${fmtSim(posting.posted)}` : 'no row was written',
+          route: '/flow/data?system=d365&table=stock_posting',
+        },
+        traceKey: receipt?.gate_pass,
+        link: status === 'Match' ? undefined : { label: 'Open live check C6', route: '/flow/checks' },
+      }
+    })
+}
+
+function liveInvoiceRows(): ReconRow[] {
+  const db = engine.db
+  return db.RBKP.slice(-14)
+    .reverse()
+    .map((r) => {
+      const pay = db.payment.find((p) => p.belnr === r.belnr)
+      const parked = r.status === 'Parked'
+      const status: ReconRow['status'] = pay ? 'Match' : 'Missing'
+      return {
+        key: r.belnr,
+        source: `€ ${num(Math.round(r.amount_eur))}`,
+        target: pay ? `€ ${num(Math.round(pay.amount_eur))}` : '—',
+        status,
+        expected: parked,
+        fields: [
+          { field: 'document', source: r.belnr, target: pay?.belnr ?? null },
+          { field: 'external invoice', source: r.ext_invoice, target: null },
+          { field: 'gate pass', source: r.gate_pass, target: null },
+          { field: 'status in SAP', source: r.status, target: pay ? 'paid' : 'not in a payment file' },
+          { field: 'amount', source: Math.round(r.amount_eur), target: pay ? Math.round(pay.amount_eur) : null },
+          { field: 'posted', source: fmtSim(r.posted), target: pay ? fmtSim(pay.run_at) : null },
+        ],
+        reason: pay
+          ? undefined
+          : parked
+            ? `The invoice is parked: ${r.reason.toLowerCase()}. Parked invoices are excluded from the payment file on purpose, so this difference is the control working rather than a defect.`
+            : 'The invoice is posted but has not been picked up yet. The payment run is hourly, so it will appear in the next file.',
+        fix: pay
+          ? undefined
+          : parked
+            ? 'No action on the interface. Resolve the park itself: live check C7 lists every parked invoice with its reason.'
+            : 'No action. Re-check after the next hourly payment run.',
+        sourceRef: {
+          system: 'SAP S/4HANA – Steel',
+          table: 'sap.rbkp',
+          note: `invoice ${r.ext_invoice} against gate pass ${r.gate_pass}`,
+          route: '/flow/data?system=sap-steel&table=RBKP',
+        },
+        targetRef: {
+          system: 'Reval',
+          table: 'reval.payment',
+          note: pay ? `payment ${pay.pay} on the ${fmtSim(pay.run_at).slice(0, 6)} run` : 'no payment row',
+          route: '/flow/data?system=reval&table=payment',
+        },
+        traceKey: r.gate_pass,
+        link: parked ? { label: 'Open live check C7', route: '/flow/checks' } : undefined,
+      }
+    })
+}
+
+function rowsFor(set: ReconSet): ReconRow[] {
+  if (set.liveSource === 'batches') return liveBatchRows()
+  if (set.liveSource === 'invoices') return liveInvoiceRows()
+  return set.sample
+}
+
 export function ReconciliationPage() {
+  const navigate = useNavigate()
+  const drawer = useDrawer()
+  const version = useSimVersion()
   const [selected, setSelected] = useState(RECON_SETS[0].id)
   const set = RECON_SETS.find((r) => r.id === selected) ?? RECON_SETS[0]
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const rows = useMemo(() => rowsFor(set), [set, version])
+  const live = !!set.liveSource
+
+  const openRow = (row: ReconRow) => {
+    const problem = row.status !== 'Match'
+    drawer.open({
+      title: `${row.key} · ${row.status.toLowerCase()}`,
+      subtitle: `${set.id} ${set.name}`,
+      width: 'lg',
+      content: (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={row.status === 'Match' ? 'success' : row.expected ? 'warning' : 'danger'}>{row.status}</Badge>
+            {row.expected && <Badge tone="neutral">correct by design</Badge>}
+            {live && <Badge tone="info">live comparison</Badge>}
+          </div>
+
+          {/* where each side came from */}
+          <div className="grid items-stretch gap-2 sm:grid-cols-[1fr_auto_1fr]">
+            {[row.sourceRef, row.targetRef].map((ref, i) => (
+              <Fragment key={i === 0 ? 'source' : 'target'}>
+                {i === 1 && (
+                  <div className="hidden items-center justify-center text-subtle sm:flex">
+                    <ArrowRight size={16} />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={!ref?.route}
+                  onClick={() => {
+                    if (!ref?.route) return
+                    drawer.closeAll()
+                    navigate(ref.route)
+                  }}
+                  className={cn(
+                    'rounded-md border border-line bg-surface2/60 px-3 py-2.5 text-left transition-colors',
+                    ref?.route && 'hover:bg-surface2',
+                  )}
+                >
+                  <div className="text-label font-semibold uppercase text-subtle">{i === 0 ? 'Source' : 'Target'}</div>
+                  <div className="mt-0.5 text-sm font-medium text-text">{ref?.system ?? (i === 0 ? set.source : set.target)}</div>
+                  <div className="font-mono text-[11px] text-primary">{ref?.table ?? '—'}</div>
+                  {ref?.note && <div className="mt-0.5 text-xs text-muted">{ref.note}</div>}
+                </button>
+              </Fragment>
+            ))}
+          </div>
+
+          {/* field by field */}
+          {row.fields?.length ? (
+            <div>
+              <div className="mb-2 text-label font-semibold uppercase text-subtle">Field by field</div>
+              <div className="overflow-hidden rounded-md border border-line">
+                <table className="w-full text-xs">
+                  <thead className="bg-surface2">
+                    <tr>
+                      <th className="px-3 py-1.5 text-left text-label uppercase text-subtle">Field</th>
+                      <th className="px-3 py-1.5 text-left text-label uppercase text-subtle">Source</th>
+                      <th className="px-3 py-1.5 text-left text-label uppercase text-subtle">Target</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {row.fields.map((f) => {
+                      const differs =
+                        f.target === null ||
+                        String(f.source).replace(/\s/g, '') !== String(f.target).replace(/\s/g, '')
+                      return (
+                        <tr key={f.field} className={cn('border-t border-line', differs && 'bg-danger-soft/50')}>
+                          <td className="px-3 py-1.5 font-mono text-muted">{f.field}</td>
+                          <td className="px-3 py-1.5 font-mono text-text">
+                            {f.source === null ? <span className="text-subtle">—</span> : String(f.source)}
+                          </td>
+                          <td className={cn('px-3 py-1.5 font-mono', differs ? 'font-semibold text-danger' : 'text-text')}>
+                            {f.target === null ? 'nothing on this side' : String(f.target)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-1.5 text-[11px] text-subtle">
+                Rows in red are the fields that do not agree. Everything else matched exactly.
+              </p>
+            </div>
+          ) : null}
+
+          {row.reason && (
+            <div className={cn('rounded-md border px-4 py-3', row.expected ? 'border-accent/40 bg-accent-soft/40' : 'border-danger/40 bg-danger-soft/40')}>
+              <div className="text-label font-semibold uppercase text-subtle">Why it differs</div>
+              <p className="mt-0.5 text-sm text-text">{row.reason}</p>
+            </div>
+          )}
+
+          {row.fix && (
+            <div className="rounded-md border border-line bg-surface2/60 px-4 py-3">
+              <div className="text-label font-semibold uppercase text-subtle">What to do</div>
+              <p className="mt-0.5 text-sm text-text">{row.fix}</p>
+            </div>
+          )}
+
+          {!problem && !row.reason && (
+            <p className="text-sm text-success">Every field agrees. Nothing to explain on this row.</p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {row.traceKey && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  drawer.closeAll()
+                  navigate(`/flow/trace?q=${encodeURIComponent(row.traceKey!)}`)
+                }}
+              >
+                Follow this load through every system
+              </Button>
+            )}
+            {row.link && (
+              <Button
+                onClick={() => {
+                  drawer.closeAll()
+                  navigate(row.link!.route)
+                }}
+              >
+                {row.link.label}
+              </Button>
+            )}
+          </div>
+        </div>
+      ),
+    })
+  }
 
   return (
     <>
       <PageHeader
         title="Migration Reconciliation"
-        subtitle="Source against target, row counts and totals, with every difference explained in words."
+        subtitle="Source against target, row counts and totals, and every difference explained down to the field."
         tabs={TABS}
       />
 
@@ -411,6 +665,7 @@ export function ReconciliationPage() {
               <div className="mb-1 flex items-center gap-2">
                 <span className="font-mono text-[11px] text-subtle">{r.id}</span>
                 <Badge tone={r.kind === 'Migration' ? 'info' : 'neutral'}>{r.kind}</Badge>
+                {r.liveSource && <Badge tone="info" className="ml-auto">live</Badge>}
               </div>
               <div className="truncate text-sm font-medium text-text">{r.name}</div>
               <div className="mt-2 flex items-baseline gap-2">
@@ -433,26 +688,65 @@ export function ReconciliationPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Row sample" subtitle="A readable slice of the comparison." />
+          <CardHeader
+            title="Row sample"
+            subtitle={
+              live
+                ? `The newest ${rows.length} records compared between ${set.source} and ${set.target}, live from the plant. Each row opens its field-by-field comparison.`
+                : `A slice of the comparison between ${set.source} and ${set.target}. Each row opens its field-by-field comparison.`
+            }
+            actions={
+              <Badge tone={rows.some((r) => r.status !== 'Match' && !r.expected) ? 'danger' : 'success'}>
+                {rows.filter((r) => r.status !== 'Match').length} of {rows.length} differ
+              </Badge>
+            }
+          />
           <DataTable
-            rows={set.sample}
+            rows={rows}
             rowKey={(r) => r.key}
             dense
-            rowTone={(r) => (r.status === 'Missing' ? 'danger' : r.status === 'Differs' ? 'warning' : undefined)}
+            onRowClick={openRow}
+            rowTone={(r) => (r.status === 'Match' ? undefined : r.expected ? 'warning' : 'danger')}
             columns={[
               { key: 'key', header: 'Key', mono: true },
-              { key: 'source', header: 'Source', mono: true },
-              { key: 'target', header: 'Target', mono: true },
+              { key: 'source', header: 'Source', mono: true, align: 'right' },
+              { key: 'target', header: 'Target', mono: true, align: 'right' },
               {
                 key: 'status',
                 header: 'Status',
-                width: 110,
+                width: 150,
                 render: (r) => (
-                  <Badge tone={r.status === 'Match' ? 'success' : r.status === 'Differs' ? 'warning' : 'danger'}>{r.status}</Badge>
+                  <span className="flex items-center gap-1.5">
+                    <Badge tone={r.status === 'Match' ? 'success' : r.expected ? 'warning' : 'danger'}>{r.status}</Badge>
+                    {r.expected && <span className="text-[10px] text-subtle">expected</span>}
+                  </span>
                 ),
               },
             ]}
+            empty="No records to compare yet. Let the plant run for a minute."
           />
+          {live && (
+            <SourceNote
+              title="How this comparison is made"
+              reads={
+                set.liveSource === 'batches'
+                  ? [{ table: 'scrap_batch' }, { table: 'stock_posting' }, { table: 'receipt' }]
+                  : [{ table: 'RBKP' }, { table: 'payment' }]
+              }
+              computes={
+                set.liveSource === 'batches'
+                  ? 'joins every batch to its D365 journal on the batch number, then compares quantity, unit and warehouse'
+                  : 'joins every invoice to its Reval payment on the document number, then compares status and amount'
+              }
+              feeds={[{ label: 'Confidence score', route: '/' }, { label: 'Release gate', route: '/release' }]}
+              steps={[
+                'The two sides are read straight from the live tables, not from an export.',
+                'They are joined on the key the interface carries between them.',
+                'Each field is compared, and the first field that disagrees explains the row.',
+                'Differences that are correct by design are labelled expected, so they are never chased.',
+              ]}
+            />
+          )}
         </Card>
 
         <Card>
@@ -472,6 +766,19 @@ export function ReconciliationPage() {
                 <p className="mt-1 text-xs text-muted">{g.explanation}</p>
               </div>
             ))}
+            {live && (
+              <div className="rounded-md border border-info/40 bg-info-soft/40 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Database size={14} className="text-info" />
+                  <span className="text-sm font-medium text-text">Measured on this run</span>
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  {rows.filter((r) => r.status !== 'Match' && !r.expected).length} genuine differences and{' '}
+                  {rows.filter((r) => r.expected).length} expected ones across the newest {rows.length} records. The
+                  numbers move while the plant runs.
+                </p>
+              </div>
+            )}
           </CardBody>
         </Card>
       </div>
@@ -479,12 +786,12 @@ export function ReconciliationPage() {
       <Card className="mt-4">
         <CardHeader title="Systems compared" />
         <CardBody className="flex flex-wrap gap-2">
-          {SYSTEMS.filter((s) => set.source.includes(s.name) || set.target.includes(s.name) || set.source.includes(s.short) || set.target.includes(s.short)).map((s) => (
-            <Badge key={s.id} tone="neutral">
-              {s.name}
+          {SYSTEMS.filter((sys) => set.source.includes(sys.name) || set.target.includes(sys.name) || set.source.includes(sys.short) || set.target.includes(sys.short)).map((sys) => (
+            <Badge key={sys.id} tone="neutral">
+              {sys.name}
             </Badge>
           ))}
-          {!SYSTEMS.some((s) => set.source.includes(s.name)) && <Badge tone="neutral">{set.source}</Badge>}
+          {!SYSTEMS.some((sys) => set.source.includes(sys.name)) && <Badge tone="neutral">{set.source}</Badge>}
         </CardBody>
       </Card>
     </>
