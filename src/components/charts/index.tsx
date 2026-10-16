@@ -7,6 +7,7 @@ import {
   Cell,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -100,11 +101,13 @@ export function MultiLineChart({
   series,
   xKey = 'minute',
   height = 200,
+  reference,
 }: {
   data: Record<string, number | string>[]
   series: { key: string; label: string; tone: 'primary' | 'success' | 'danger' | 'accent' | 'info' }[]
   xKey?: string
   height?: number
+  reference?: { y: number; label: string; tone?: 'danger' | 'accent' | 'success' }
 }) {
   const { t, axis, tooltip } = useChartTheme()
   const colour = { primary: t.primary, success: t.success, danger: t.danger, accent: t.accent, info: t.info }
@@ -115,6 +118,14 @@ export function MultiLineChart({
         <XAxis dataKey={xKey} {...axis} />
         <YAxis {...axis} />
         <Tooltip {...tooltip} />
+        {reference && (
+          <ReferenceLine
+            y={reference.y}
+            stroke={reference.tone === 'success' ? t.success : reference.tone === 'accent' ? t.accent : t.danger}
+            strokeDasharray="5 4"
+            label={{ value: reference.label, position: 'insideTopRight', fill: t.subtle, fontSize: 10 }}
+          />
+        )}
         {series.map((s) => (
           <Line
             key={s.key}

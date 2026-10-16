@@ -108,7 +108,7 @@ export function FindingPage() {
 
       {finding.affectedKeys.length > 0 && (
         <Card>
-          <CardHeader title="Records affected" subtitle="Click one to follow it through every system." />
+          <CardHeader title="Records affected" subtitle="The exact loads this finding was raised against." />
           <CardBody className="flex flex-wrap gap-1.5">
             {finding.affectedKeys.map((k) => (
               <button

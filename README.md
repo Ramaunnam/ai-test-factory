@@ -27,7 +27,8 @@ Other scripts:
 
 ## The 15-minute demo path
 
-1. **Command Centre** — the confidence score, how it is calculated, and workflow health stage by stage.
+1. **Command Centre** — the confidence score, how it is calculated, and **What to do next**: the four
+   actions ranked by the points each would add to the score.
 2. **Process Ontology** — how a workflow is modelled, then the Ontology graph and the 11 AI agents.
 3. **Live Data Flow** — press *Run the plant*. Dots are real messages moving between systems. Click one
    for its payload.
@@ -38,8 +39,12 @@ Other scripts:
    expected, one data check fails and raises F-001. End with the evidence pack.
 7. **Interface Testing** — open IF-01 and compare a damaged message field by field.
 8. **Change & Regression** — CH-204, then *Run regression* to compare before and after.
-9. **Impact Simulator as Plant Head** — switch role in the header; the menu and the landing page change.
-10. **Release & Close** — the GO / CONDITIONAL / NO-GO gate and the freeze calendar.
+9. **Month-End Load** — run the 5x profile. The interface-by-interface table names the one that bends
+   first (invoice capture, saturating at 3x) and ties it to the two invoices lost at the cut-off.
+10. **Impact Simulator as Plant Head** — switch role in the header; the menu and the landing page change.
+    The verdict carries a number: the confidence score today against the score if the release shipped.
+11. **Release & Close** — the gate decision with its **five computed exit criteria**, so anyone can ask
+    "what turns this into GO?" and get an answer, plus the close calendar and the sign-off state.
 
 Press <kbd>Ctrl</kbd>+<kbd>K</kbd> at any point: the command palette reaches every page, system,
 interface, scenario, finding and simulation command.
@@ -82,6 +87,14 @@ src/
   data/       systems, interfaces, processes, scenarios, findings, changes, SoD, requirements
   lib/        cn, formatting, score, theme tokens
 ```
+
+### Every number says where it came from
+
+Most cards carry a provenance strip: `from yard.weighbridge_ticket 74 → compares net against SAP → into
+Confidence score`. Every part of it is a link, and **How this works** opens a panel with the flow drawn
+out, the steps in order, and the newest five live rows from the source table. It is one component
+(`components/domain/SourceNote.tsx`) fed by `lib/live.ts`, so the answer to "where does this come from"
+is the same on every page.
 
 ### The simulation
 

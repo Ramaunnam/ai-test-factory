@@ -16,6 +16,7 @@ import {
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { INTERFACES, SYSTEMS } from '@/data'
+import { SourceNote } from '@/components/domain/SourceNote'
 import { engine } from '@/sim/engine'
 import { useSimVersion } from '@/sim/useSim'
 import { fmtSim, num } from '@/lib/format'
@@ -190,7 +191,7 @@ export function InterfacesPage() {
 
       {!detail ? (
         <Card>
-          <CardHeader title="All fourteen interfaces" subtitle="Click one to compare its messages field by field." />
+          <CardHeader title="All fourteen interfaces" subtitle="Nine carry live traffic; the other five are part of the landscape but quiet in this demo." />
           <DataTable
             rows={rows}
             rowKey={(r) => r.id}
@@ -226,6 +227,21 @@ export function InterfacesPage() {
               },
             ]}
           />
+          <SourceNote
+            title="What is being compared here"
+            reads={[
+              { label: 'engine.messages', route: '/flow', note: 'every message sent on a live interface' },
+              { table: 'MSEG', note: 'what the receiving system actually stored' },
+            ]}
+            computes="counts sent against received per interface, and compares the payload field by field"
+            feeds={[{ label: 'Confidence score', route: '/' }, { label: 'Month-End Load', route: '/load' }]}
+            steps={[
+              'Every message keeps the payload it was sent with.',
+              'Mismatched means it arrived but a field was damaged on the way.',
+              'Missing means it never arrived; duplicated means it arrived twice.',
+              'Opening a message shows both sides of the handoff, field by field.',
+            ]}
+          />
         </Card>
       ) : (
         <>
@@ -241,7 +257,7 @@ export function InterfacesPage() {
             />
           ) : (
             <Card>
-              <CardHeader title="Messages" subtitle="Click a message to compare the fields on both sides." />
+              <CardHeader title="Messages" subtitle="Newest first, with the travel time and what arrived at the other end." />
               <DataTable
                 rows={detailMessages}
                 rowKey={(m) => m.id}

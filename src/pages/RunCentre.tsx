@@ -26,6 +26,7 @@ import {
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
+import { SourceNote } from '@/components/domain/SourceNote'
 import { PROCESSES, RUNS, SCENARIOS } from '@/data'
 import { store, useStore } from '@/data/appStore'
 import { useToast } from '@/providers/ToastProvider'
@@ -212,7 +213,10 @@ export function RunCentrePage() {
     return out
   }, [visible, running])
 
-  const openFindings = appState.findings.filter((f) => f.status !== 'Closed')
+  const severityFilter = params.get('severity')
+  const openFindings = appState.findings
+    .filter((f) => f.status !== 'Closed')
+    .filter((f) => !severityFilter || f.severity === severityFilter)
 
   return (
     <>
@@ -345,7 +349,7 @@ export function RunCentrePage() {
       <Card className="mb-4">
         <CardHeader
           title="Choose what to run"
-          subtitle="Filter by workflow and by type, then run a single scenario or the whole group."
+          subtitle="Thirty approved scenarios across six workflows, filtered by workflow and by type."
           actions={
             <div className="flex flex-wrap gap-1.5">
               {(['All', 'Positive', 'Negative', 'Regression'] as const).map((t) => (
@@ -406,7 +410,22 @@ export function RunCentrePage() {
         />
       </Card>
 
-      <SectionTitle title="Findings" hint="Raised by runs and by the live checks. Click one to open its card." />
+      <SectionTitle
+        title="Findings"
+        hint="Everything raised by a run, a live check or an access proof, with the evidence attached."
+        actions={
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip selected={!severityFilter} onClick={() => setParams({})}>
+              All
+            </Chip>
+            {(['Critical', 'High', 'Medium', 'Low'] as const).map((s) => (
+              <Chip key={s} selected={severityFilter === s} onClick={() => setParams({ severity: s })}>
+                {s}
+              </Chip>
+            ))}
+          </div>
+        }
+      />
       <Card>
         <DataTable
           rows={openFindings}
@@ -432,6 +451,22 @@ export function RunCentrePage() {
             },
             { key: 'status', header: 'Status', width: 120, render: (f) => <Badge tone={f.status === 'Open' ? 'danger' : f.status === 'In progress' ? 'warning' : 'success'}>{f.status}</Badge> },
             { key: 'raised', header: 'Raised', width: 170 },
+          ]}
+        />
+        <SourceNote
+          title="Where findings come from"
+          reads={[
+            { label: 'Run steps', route: '/run', note: 'a failing step raises one automatically' },
+            { label: 'Live checks', route: '/flow/checks', note: 'Raise finding on any failing check' },
+            { label: 'Access proofs', route: '/access-sod', note: 'a forbidden action that was allowed' },
+          ]}
+          computes="every finding keeps its evidence, the records affected and the step or check that found it"
+          feeds={[{ label: 'Confidence score', route: '/' }, { label: 'Release gate', route: '/release' }]}
+          steps={[
+            'A finding is only created by something that actually ran: a step, a check or a proof.',
+            'It keeps the affected keys, so each one can be followed through every system.',
+            'Open critical findings cap the confidence score at 79.',
+            'The release gate cannot reach GO while one is open.',
           ]}
         />
       </Card>
@@ -482,7 +517,7 @@ export function EvidencePage() {
       </Card>
 
       <Card>
-        <CardHeader title="All runs" subtitle="Click a run to open its printable summary." />
+        <CardHeader title="All runs" subtitle="Every run kept, with its verdict and how long it took." />
         <DataTable
           rows={allRuns}
           rowKey={(r) => r.id}

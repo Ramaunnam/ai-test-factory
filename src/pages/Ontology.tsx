@@ -17,6 +17,9 @@ import {
 import { PageHeader } from '@/app/PageHeader'
 import { HealthLegend, WorkflowFlow } from '@/components/domain/WorkflowFlow'
 import { AGENTS, PROCESSES, REQUIREMENTS, SCENARIOS, processById } from '@/data'
+import { SourceNote } from '@/components/domain/SourceNote'
+import { TABLE_LABEL, tableCount, tableRoute } from '@/lib/live'
+import type { TableName } from '@/sim/types'
 import { useStore } from '@/data/appStore'
 import { useThemeTokens } from '@/lib/useThemeTokens'
 import { num } from '@/lib/format'
@@ -107,7 +110,7 @@ export function OntologyPage() {
 
       {view === 'lanes' ? (
         <Card className="mb-4">
-          <CardHeader title="Stage by stage" subtitle="Click a row to open the stage." />
+          <CardHeader title="Stage by stage" subtitle="Who does it, how, in which system, against which rule, and how much data it holds today." />
           <DataTable
             rows={process.stages}
             rowKey={(s) => s.id}
@@ -135,6 +138,50 @@ export function OntologyPage() {
                 </span>
               ) },
               { key: 'tests', header: 'Tests', align: 'right', mono: true, width: 80 },
+              {
+                key: 'live',
+                header: 'Live rows',
+                align: 'right',
+                width: 110,
+                render: (s) => {
+                  const tables = s.data.split(', ').filter((d): d is TableName => d in TABLE_LABEL)
+                  if (!tables.length) return <span className="text-subtle">not simulated</span>
+                  const total = tables.reduce((n, t) => n + tableCount(t), 0)
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(tableRoute(tables[0]))
+                      }}
+                      className="font-mono text-[12.5px] text-primary hover:underline"
+                      title={tables.map((t) => TABLE_LABEL[t]).join(', ')}
+                    >
+                      {num(total)}
+                    </button>
+                  )
+                },
+                value: (s) =>
+                  s.data
+                    .split(', ')
+                    .filter((d): d is TableName => d in TABLE_LABEL)
+                    .reduce((n, t) => n + tableCount(t), 0),
+              },
+            ]}
+          />
+          <SourceNote
+            title="Where the ontology comes from"
+            reads={[
+              { label: 'Process Discovery', route: '/discovery', note: 'recordings, the plant log and the procedures' },
+              { table: 'gate_pass', note: 'the live tables each stage writes to' },
+            ]}
+            computes="one row per stage: who does it, in which system, against which rule, proven by which test"
+            feeds={[{ label: 'Test Studio', route: '/studio' }, { label: 'Change Impact', route: '/regression' }]}
+            steps={[
+              'Discovery produces the stages and the order they happen in.',
+              'Each stage is tied to the system and the tables it writes to, so the live row count is real.',
+              'The rule column is what a test must prove for that stage.',
+              'Change Impact uses the same map to work out what a change touches.',
             ]}
           />
         </Card>

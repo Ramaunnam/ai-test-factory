@@ -731,15 +731,94 @@ export interface DiscoverySession {
   steps: number
   minutes: number
   recorded: string
+  site: string
+  /** Who asked for the recording and why it was taken. */
+  why: string
+  /** What watching the work showed that the written procedure does not say. */
+  found: string
+  /** The workflow stages this recording is evidence for. */
+  stageIds: string[]
 }
 
 export const DISCOVERY_SESSIONS: DiscoverySession[] = [
-  { id: 'DS-01', name: 'Gate pass to release', role: 'Gate operator', system: 'Yard Management', steps: 24, minutes: 9, recorded: '09 Oct 2026' },
-  { id: 'DS-02', name: 'Invoice capture and send', role: 'Accounts payable', system: 'Esker', steps: 18, minutes: 7, recorded: '09 Oct 2026' },
-  { id: 'DS-03', name: 'Three-way match and park handling', role: 'Accounts payable', system: 'SAP S/4HANA – Steel', steps: 31, minutes: 14, recorded: '10 Oct 2026' },
-  { id: 'DS-04', name: 'Sortation and batch labelling', role: 'Yard operator', system: 'Scrap Yard Operations', steps: 22, minutes: 11, recorded: '10 Oct 2026' },
-  { id: 'DS-05', name: 'Sample release', role: 'Lab technician', system: 'Laboratory app', steps: 12, minutes: 5, recorded: '11 Oct 2026' },
-  { id: 'DS-06', name: 'Heat confirmation review', role: 'Production', system: 'Mill Execution System', steps: 16, minutes: 6, recorded: '11 Oct 2026' },
+  {
+    id: 'DS-01',
+    name: 'Gate pass to release',
+    role: 'Gate operator',
+    system: 'Yard Management',
+    steps: 24,
+    minutes: 9,
+    recorded: '09 Oct 2026',
+    site: 'PL01',
+    why: 'Asked for by the key user. The weighbridge creates every weight in the chain, so an error here reaches the supplier invoice and the month-end stock value.',
+    found: 'The net weight is always read from the scale, never typed. But a vehicle can be re-weighed on request with no record of why.',
+    stageIds: ['P1-S1'],
+  },
+  {
+    id: 'DS-02',
+    name: 'Invoice capture and send',
+    role: 'Accounts payable',
+    system: 'Esker',
+    steps: 18,
+    minutes: 7,
+    recorded: '09 Oct 2026',
+    site: 'PL01',
+    why: 'Finance reported that too many invoices park. This recording was taken to see what capture actually does with the purchase order field.',
+    found: 'When the scan is unclear the purchase order field is left empty and the invoice is sent anyway, which is exactly what parks it later.',
+    stageIds: ['P1-S3'],
+  },
+  {
+    id: 'DS-03',
+    name: 'Three-way match and park handling',
+    role: 'Accounts payable',
+    system: 'SAP S/4HANA – Steel',
+    steps: 31,
+    minutes: 14,
+    recorded: '10 Oct 2026',
+    site: 'PL01',
+    why: 'To measure what one parked invoice really costs, end to end, including the phone call to the yard.',
+    found: 'Handling one park takes about 28 minutes and always pulls in a second person at the weighbridge. This loop is in no procedure.',
+    stageIds: ['P1-S4'],
+  },
+  {
+    id: 'DS-04',
+    name: 'Sortation and batch labelling',
+    role: 'Yard operator',
+    system: 'Scrap Yard Operations',
+    steps: 22,
+    minutes: 11,
+    recorded: '10 Oct 2026',
+    site: 'YD02',
+    why: 'Stock in D365 did not match the yard. The recording follows one receipt being turned into batches.',
+    found: 'Batches are weighed one by one and the last takes the remainder, so the weights always add up in the yard, whatever D365 later shows.',
+    stageIds: ['P2-S2'],
+  },
+  {
+    id: 'DS-05',
+    name: 'Sample release',
+    role: 'Lab technician',
+    system: 'Laboratory app',
+    steps: 12,
+    minutes: 5,
+    recorded: '11 Oct 2026',
+    site: 'YD02',
+    why: 'Batches were being held before the mill. The recording follows one sample from the barcode to release.',
+    found: 'A result can be released with molybdenum blank, and nothing on the screen stops it.',
+    stageIds: ['P2-S3'],
+  },
+  {
+    id: 'DS-06',
+    name: 'Heat confirmation review',
+    role: 'Production',
+    system: 'Mill Execution System',
+    steps: 16,
+    minutes: 6,
+    recorded: '11 Oct 2026',
+    site: 'PL01',
+    why: 'The shift report understated output. The recording shows how production checks that the ERP received a heat.',
+    found: 'Operators open the ERP by hand to confirm, because the file is often late. That manual check is the real control.',
+    stageIds: ['P4-S3'],
+  },
 ]
 
 export const TREND_30_DAYS = [

@@ -20,6 +20,7 @@ import {
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { SOD_CONFLICTS, SOD_RULES } from '@/data'
+import { SourceNote } from '@/components/domain/SourceNote'
 import { store, useStore } from '@/data/appStore'
 import { useToast } from '@/providers/ToastProvider'
 import { useDrawer } from '@/providers/DrawerProvider'
@@ -326,6 +327,21 @@ export function AccessSodPage() {
                 </Button>
               ),
             },
+          ]}
+        />
+        <SourceNote
+          title="How a conflict is proven"
+          reads={[
+            { label: 'Role assignments', note: 'who holds which role in the test environment' },
+            { label: 'SoD rules', note: 'the combinations that must never meet' },
+          ]}
+          computes="signs in as the user, attempts the forbidden second action, and records what the system allowed"
+          feeds={[{ label: 'Findings', route: '/run' }, { label: 'Release gate', route: '/release' }]}
+          steps={[
+            'The rule says two roles must not be held by one person.',
+            'Prove it signs in as that user and performs the first action.',
+            'It then attempts the forbidden second action and records the result.',
+            'Allowed means the control does not work, which becomes a finding with the evidence attached.',
           ]}
         />
       </Card>

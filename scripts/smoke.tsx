@@ -63,7 +63,24 @@ const misc = await import('@/pages/Misc')
 
 type Case = [label: string, pattern: string, path: string, Comp: React.ComponentType]
 
+const sourceNote = await import('@/components/domain/SourceNote')
+
+/**
+ * Drawer and toast content is rendered by the providers, not by the page. If the
+ * router is not above them, anything in a drawer that navigates throws and the
+ * whole app goes blank. This case renders exactly that content.
+ */
+const DrawerContentProbe = () => (
+  <sourceNote.SourceDetail
+    reads={[{ table: 'MSEG', note: 'goods receipts' }, { label: 'Live checks', route: '/flow/checks' }]}
+    computes="compares the weighbridge against SAP"
+    feeds={[{ label: 'Confidence score', route: '/' }]}
+    steps={['one', 'two']}
+  />
+)
+
 const CASES: Case[] = [
+  ['Drawer content (navigates)', '/', '/', DrawerContentProbe],
   ['Command Centre / Health', '/', '/', cc.HealthPage],
   ['Command Centre / Release', '/release', '/release', cc.ReleasePage],
   ['Command Centre / Load', '/load', '/load', cc.LoadPage],
@@ -101,19 +118,19 @@ let failed = 0
 for (const [label, pattern, path, Comp] of CASES) {
   try {
     const html = renderToString(
-      <ThemeProvider>
-        <RoleProvider>
-          <ToastProvider>
-            <DrawerProvider>
-              <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={[path]}>
+        <ThemeProvider>
+          <RoleProvider>
+            <ToastProvider>
+              <DrawerProvider>
                 <Routes>
                   <Route path={pattern} element={<Comp />} />
                 </Routes>
-              </MemoryRouter>
-            </DrawerProvider>
-          </ToastProvider>
-        </RoleProvider>
-      </ThemeProvider>,
+              </DrawerProvider>
+            </ToastProvider>
+          </RoleProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
     )
     if (html.length < 400) throw new Error(`rendered only ${html.length} characters`)
     console.log(`  ok    ${label.padEnd(32)} ${String(html.length).padStart(7)} chars`)

@@ -14,62 +14,74 @@ export interface ConfidenceInput {
   findings: Finding[]
   scenariosPassed: number
   scenariosTotal: number
-  interfacesMatched: number
-  interfacesTotal: number
+  /** Messages that arrived intact, and how many were sent. */
+  messagesMatched: number
+  messagesTotal: number
 }
 
 export interface ConfidenceBreakdown {
   score: number
+  raw: number
   capped: boolean
   parts: { label: string; weight: number; value: number; note: string }[]
 }
 
+const WEIGHTS = { data: 0.35, scenarios: 0.3, interfaces: 0.2, findings: 0.15 }
+
 /**
- * Deterministic. Never random. Capped at 79 while a critical finding is open,
- * which is why the gauge can sit at 79 with green inputs.
+ * Deterministic, and measured at the level the business cares about: how many
+ * records agree, not how many checks happen to be green. One failing check over
+ * 500 clean records is a problem worth seeing, not a reason to call the whole
+ * landscape untrustworthy.
  */
 export function confidence(input: ConfidenceInput): ConfidenceBreakdown {
+  const compared = input.checks.reduce((s, c) => s + c.compared, 0)
+  const disagree = input.checks.reduce((s, c) => s + c.rows.length, 0)
+  const agree = Math.max(0, compared - disagree)
+  const dataScore = compared ? (agree / compared) * 100 : 100
   const checksPassing = input.checks.filter((c) => c.status === 'pass').length
-  const checkScore = input.checks.length ? (checksPassing / input.checks.length) * 100 : 0
-  const scenarioScore = input.scenariosTotal ? (input.scenariosPassed / input.scenariosTotal) * 100 : 0
-  const interfaceScore = input.interfacesTotal
-    ? (input.interfacesMatched / input.interfacesTotal) * 100
-    : 0
-  const open = input.findings.filter((f) => f.status === 'Open')
+
+  const scenarioScore = input.scenariosTotal ? (input.scenariosPassed / input.scenariosTotal) * 100 : 100
+
+  const interfaceScore = input.messagesTotal ? (input.messagesMatched / input.messagesTotal) * 100 : 100
+
+  const open = input.findings.filter((f) => f.status !== 'Closed')
   const criticals = open.filter((f) => f.severity === 'Critical').length
   const highs = open.filter((f) => f.severity === 'High').length
-  const findingScore = Math.max(0, 100 - criticals * 25 - highs * 10 - (open.length - criticals - highs) * 3)
+  const mediums = open.filter((f) => f.severity === 'Medium').length
+  const lows = open.length - criticals - highs - mediums
+  const findingScore = Math.max(10, 100 - criticals * 15 - highs * 6 - mediums * 2 - lows * 1)
 
   const parts = [
     {
-      label: 'Live data checks',
-      weight: 0.35,
-      value: checkScore,
-      note: `${checksPassing} of ${input.checks.length} checks agree across systems`,
+      label: 'Data agreement across systems',
+      weight: WEIGHTS.data,
+      value: dataScore,
+      note: `${agree.toLocaleString('en-GB')} of ${compared.toLocaleString('en-GB')} records compared agree · ${checksPassing} of ${input.checks.length} checks fully green`,
     },
     {
       label: 'Scenario results',
-      weight: 0.3,
+      weight: WEIGHTS.scenarios,
       value: scenarioScore,
       note: `${input.scenariosPassed} of ${input.scenariosTotal} scenarios passed in the last run`,
     },
     {
-      label: 'Interface matching',
-      weight: 0.2,
+      label: 'Interface messages intact',
+      weight: WEIGHTS.interfaces,
       value: interfaceScore,
-      note: `${input.interfacesMatched} of ${input.interfacesTotal} interfaces match field by field`,
+      note: `${input.messagesMatched.toLocaleString('en-GB')} of ${input.messagesTotal.toLocaleString('en-GB')} messages arrived undamaged`,
     },
     {
       label: 'Open findings',
-      weight: 0.15,
+      weight: WEIGHTS.findings,
       value: findingScore,
-      note: `${open.length} open (${criticals} critical, ${highs} high)`,
+      note: `${open.length} open: ${criticals} critical, ${highs} high, ${mediums + lows} other`,
     },
   ]
 
   const raw = parts.reduce((sum, p) => sum + p.weight * p.value, 0)
   const capped = criticals > 0 && raw > 79
-  return { score: Math.round(capped ? 79 : raw), capped, parts }
+  return { score: Math.round(capped ? 79 : raw), raw: Math.round(raw), capped, parts }
 }
 
 export function verdictOf(passed: number, failed: number, healed: number): 'PASS' | 'CONDITIONAL' | 'FAIL' {

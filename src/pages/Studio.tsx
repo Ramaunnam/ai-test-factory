@@ -20,6 +20,7 @@ import {
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { PROCESSES, SCENARIOS, type Scenario } from '@/data'
+import { SourceNote } from '@/components/domain/SourceNote'
 import { store, useStore } from '@/data/appStore'
 import { useDrawer } from '@/providers/DrawerProvider'
 import { useToast } from '@/providers/ToastProvider'
@@ -282,6 +283,22 @@ export function StudioPage() {
   expect abs(net_kg - menge) <= 20`}</CodeBlock>
           )}
         </CardBody>
+        <SourceNote
+          title="Where scenarios come from"
+          reads={[
+            { label: 'Process Ontology', route: '/ontology', note: 'the stages, rules and systems' },
+            { label: 'Failing live checks', route: '/flow/checks', note: 'what is actually going wrong today' },
+            { label: 'Change feed', route: '/regression', note: 'what is about to change' },
+          ]}
+          computes="writes positive, negative and regression scenarios, then waits for a key user to approve them"
+          feeds={[{ label: 'Run Centre', route: '/run' }, { label: 'Approvals', route: '/approvals' }]}
+          steps={[
+            'The agent reads the stage, its rule and the systems involved.',
+            'It writes the happy path first, then the negatives that must be refused.',
+            'A regression scenario is added for anything a current change could break.',
+            'Nothing runs until a key user approves it here or in Approvals.',
+          ]}
+        />
       </Card>
 
       {groups.map((g) => (

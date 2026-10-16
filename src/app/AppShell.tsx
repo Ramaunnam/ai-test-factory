@@ -140,7 +140,7 @@ export function AppShell() {
           onOpenMobileNav={() => setMobileOpen(true)}
         />
 
-        <main ref={mainRef} id="main-scroll" className="j2w-scroll relative flex-1 overflow-y-auto">
+        <main ref={mainRef} id="main-scroll" tabIndex={-1} className="j2w-scroll relative flex-1 overflow-y-auto outline-none">
           <div key={pathname} className="mx-auto w-full max-w-[1680px] animate-fadeUp px-6 py-6 2xl:px-8">
             <Suspense
               fallback={

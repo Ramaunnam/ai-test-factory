@@ -17,6 +17,7 @@ import {
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { FlowMap, MapLegend } from '@/components/domain/FlowMap'
+import { SourceNote } from '@/components/domain/SourceNote'
 import { INTERFACES, SYSTEMS, type SystemMeta } from '@/data'
 import { SYSTEM_TABLES_BY_SYSTEM } from '@/data/flowHelpers'
 import { engine } from '@/sim/engine'
@@ -206,14 +207,30 @@ export function LandscapePage() {
           </div>
 
           <Card>
-            <CardHeader title="The landscape" subtitle="Click a system or an interface for its details." actions={<MapLegend className="hidden xl:flex" />} />
+            <CardHeader title="The landscape" subtitle="Three bands: the shop floor, the core ERP, and finance and output." actions={<MapLegend className="hidden xl:flex" />} />
             <div className="j2w-scroll overflow-x-auto p-3">
               <FlowMap counts={counts} failing={failing} onSystemClick={openSystem} onInterfaceClick={openInterface} />
             </div>
+            <SourceNote
+              title="How the map is drawn"
+              reads={[
+                { label: '10 systems', route: '/systems', note: 'their band, owner and connection' },
+                { label: '14 interfaces', route: '/interfaces', note: 'who sends what to whom' },
+                { table: 'MSEG', note: 'one of the nine live tables counted on each card' },
+              ]}
+              computes="counts the rows each system holds and the records the live checks disagree with"
+              feeds={[{ label: 'Live Data Flow', route: '/flow' }, { label: 'Impact Simulator', route: '/simulator' }]}
+              steps={[
+                'The landscape itself is fixed reference data: ten systems and fourteen interfaces.',
+                'The record counts come from the live simulation, table by table.',
+                'A red border means a live check currently disagrees about rows in that system.',
+                'Nine of the fourteen interfaces carry live traffic; the rest are drawn dashed.',
+              ]}
+            />
           </Card>
 
           <Card className="mt-4">
-            <CardHeader title="Every interface" subtitle="Click a row to open it in interface testing." />
+            <CardHeader title="Every interface" subtitle="What each one carries, how it travels and how often." />
             <DataTable
               rows={INTERFACES}
               rowKey={(i) => i.id}

@@ -21,6 +21,7 @@ import {
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
+import { SourceNote } from '@/components/domain/SourceNote'
 import { CHANGES, HEALING, PROCESSES, RECON_SETS, RUNS, SCENARIOS, SYSTEMS } from '@/data'
 import { store, useStore } from '@/data/appStore'
 import { useToast } from '@/providers/ToastProvider'
@@ -96,7 +97,7 @@ export function ChangeImpactPage() {
         tabs={TABS}
       />
 
-      <SectionTitle title="Change feed" hint="Highest risk first. Click a card to open it." />
+      <SectionTitle title="Change feed" hint="Six changes in flight across two releases, highest risk first." />
       <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {[...CHANGES]
           .sort((a, b) => b.risk - a.risk)
@@ -149,6 +150,22 @@ export function ChangeImpactPage() {
           ))}
         </CardBody>
         <CardFooterNote text={change.business} />
+        <SourceNote
+          title="How change impact is worked out"
+          reads={[
+            { label: 'Change feed', note: 'transports, schema changes and vendor upgrades' },
+            { label: 'Process Ontology', route: '/ontology', note: 'which stage uses which system and field' },
+            { label: 'Baseline run', route: '/evidence', note: 'how the same scenarios behaved before' },
+          ]}
+          computes="maps each change onto the stages that use what it touches, then walks downstream from there"
+          feeds={[{ label: 'Impact Simulator', route: '/simulator' }, { label: 'Release gate', route: '/release' }]}
+          steps={[
+            'A change names the system and the field or behaviour it alters.',
+            'The ontology says which stages read that field, which is where the change lands.',
+            'Everything after those stages in the same workflow feels it downstream.',
+            'Regression re-runs the affected scenarios and compares them against the baseline run.',
+          ]}
+        />
       </Card>
 
       <SectionTitle title="Where the change hits your workflows" hint="Red is where it lands. Amber is what feels it afterwards." />

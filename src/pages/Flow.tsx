@@ -32,6 +32,7 @@ import {
 import { PageHeader } from '@/app/PageHeader'
 import { FlowMap, MapLegend } from '@/components/domain/FlowMap'
 import { TraceTimeline } from '@/components/domain/TraceTimeline'
+import { SourceNote } from '@/components/domain/SourceNote'
 import { engine, FAULTS } from '@/sim/engine'
 import { runAllChecks, runCheck, checkSummary, type CheckResult } from '@/sim/checks'
 import { useSim, useSimVersion } from '@/sim/useSim'
@@ -239,7 +240,7 @@ export function LiveFlowPage() {
       <Card className="mb-4">
         <CardHeader
           title="How the data moves"
-          subtitle="Each dot is a real message. Click a dot for its payload, a system for its tables, or an interface for its handoffs."
+          subtitle="Each dot is one message in flight, drawn at its real position between sending and arrival."
           actions={<MapLegend className="hidden xl:flex" />}
         />
         <div className="j2w-scroll overflow-x-auto p-3">
@@ -257,6 +258,22 @@ export function LiveFlowPage() {
         <div className="border-t border-line px-4 py-2 xl:hidden">
           <MapLegend />
         </div>
+        <SourceNote
+          title="What the dots actually are"
+          reads={[
+            { table: 'weighbridge_ticket', note: 'written when a vehicle is weighed' },
+            { table: 'MSEG', note: 'written when SAP books the goods receipt' },
+            { label: 'engine.messages', note: 'every message in flight between two systems' },
+          ]}
+          computes="interpolates each message between its send time and its arrival along the interface it travels on"
+          feeds={[{ label: 'Live checks', route: '/flow/checks' }, { label: 'Interface Testing', route: '/interfaces' }]}
+          steps={[
+            'A truck, a recycling load or a heat creates rows in the system that owns them.',
+            'Anything crossing a system boundary becomes a message with a payload and a travel time.',
+            'A fault switch can damage, lose or duplicate that message on the way.',
+            'The receiving system stores whatever arrived, which is what the live checks then compare.',
+          ]}
+        />
       </Card>
 
       <div className="mb-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -299,7 +316,7 @@ export function LiveFlowPage() {
         </Card>
 
         <Card>
-          <CardHeader title="What just happened" subtitle="Click any line to follow that load through every system." />
+          <CardHeader title="What just happened" subtitle="The plain-language event stream, newest first." />
           <div className="j2w-scroll j2w-log h-[420px] overflow-y-auto px-4 py-2">
             {[...eng.events].reverse().slice(0, 80).map((e) => (
               <button
@@ -404,7 +421,7 @@ export function SystemDataPage() {
     <>
       <PageHeader
         title="System Data"
-        subtitle="The actual tables behind each system. Red rows are the ones a live check disagrees with. Click a row to follow it."
+        subtitle="The actual tables behind each system. Red rows are the ones a live check disagrees with."
         tabs={useFlowTabs(results)}
       />
 
@@ -458,7 +475,7 @@ export function SystemDataPage() {
                 (row.belnr as string)
               if (key) navigate(`/flow/trace?q=${encodeURIComponent(String(key))}`)
             }}
-            footerNote={<span>newest 200 rows · click a row to trace it</span>}
+            footerNote={<span>newest 200 rows of the last 24 simulated hours</span>}
           />
         ) : (
           <EmptyState title="No rows yet" description="Let the plant run for a minute, or send a truck through the gate." />
@@ -540,6 +557,18 @@ export function LiveChecksPage() {
           </span>
           <span className="ml-auto text-xs text-subtle">plant clock {fmtSim(engine.now)}</span>
         </CardBody>
+        <SourceNote
+          title="How a live check works"
+          reads={[{ table: 'weighbridge_ticket' }, { table: 'MSEG' }, { table: 'chemistry' }, { table: 'stock_posting' }]}
+          computes="joins the tables on their shared key and reports every row where two systems disagree"
+          feeds={[{ label: 'Confidence score', route: '/' }, { label: 'Findings', route: '/run' }]}
+          steps={[
+            'Each check is one business rule written as a readable query.',
+            'Records still in flight are ignored, so a check never fails just because a message has not landed yet.',
+            'A failing row carries a plain-language cause, not just a difference.',
+            'Raise finding turns those rows into a finding; Fix the cause switches the fault off and replays.',
+          ]}
+        />
       </Card>
 
       <div className="space-y-3">
