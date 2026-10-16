@@ -1,0 +1,231 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Design tokens. Every colour in the app comes from here.
+   Light is the default; .dark redefines the complete set.
+   Channels are raw so Tailwind can apply opacity (rgb(var(--x) / <alpha>)).
+--------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --bg: 244 247 250;
+  --surface: 255 255 255;
+  --surface-2: 237 242 247;
+  --surface-3: 227 234 243;
+  --line: 216 224 234;
+  --line-strong: 188 200 216;
+
+  --text: 15 30 46;
+  --muted: 90 107 128;
+  --subtle: 132 147 166;
+
+  --primary: 20 57 92;
+  --primary-hover: 27 74 118;
+  --primary-press: 15 44 71;
+  --primary-soft: 228 237 246;
+  --on-primary: 255 255 255;
+
+  --accent: 217 138 11;
+  --accent-soft: 251 240 219;
+  --success: 29 122 76;
+  --success-soft: 225 244 234;
+  --danger: 192 57 43;
+  --danger-soft: 251 232 229;
+  --info: 31 111 178;
+  --info-soft: 228 240 250;
+  --ai: 109 74 201;
+  --ai-soft: 238 233 251;
+
+  --focus: 47 128 237;
+  --overlay: 9 20 32;
+  --overlay-alpha: 0.45;
+
+  --shadow-sm: 0 1px 2px rgb(15 30 46 / 0.06);
+  --shadow-md: 0 4px 14px rgb(15 30 46 / 0.08);
+  --shadow-lg: 0 18px 48px rgb(15 30 46 / 0.16);
+
+  --t-fast: 120ms;
+  --t-base: 180ms;
+  --t-slow: 280ms;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --bg: 11 20 32;
+  --surface: 17 28 43;
+  --surface-2: 24 39 56;
+  --surface-3: 31 48 68;
+  --line: 36 54 75;
+  --line-strong: 54 80 107;
+
+  --text: 231 237 245;
+  --muted: 154 170 189;
+  --subtle: 110 129 151;
+
+  --primary: 77 144 210;
+  --primary-hover: 105 166 224;
+  --primary-press: 60 127 192;
+  --primary-soft: 21 48 74;
+  --on-primary: 7 22 36;
+
+  --accent: 230 170 66;
+  --accent-soft: 58 43 15;
+  --success: 66 196 135;
+  --success-soft: 13 46 32;
+  --danger: 242 122 112;
+  --danger-soft: 53 23 21;
+  --info: 92 170 230;
+  --info-soft: 14 42 65;
+  --ai: 171 141 246;
+  --ai-soft: 36 26 64;
+
+  --focus: 127 182 247;
+  --overlay: 2 6 12;
+  --overlay-alpha: 0.62;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 6px 18px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 24px 60px rgb(0 0 0 / 0.6);
+}
+
+@layer base {
+  * {
+    border-color: rgb(var(--line));
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-text font-sans text-base antialiased;
+    overflow: hidden; /* the main area is the only scroll container */
+  }
+
+  ::selection {
+    background: rgb(var(--primary-soft));
+    color: rgb(var(--text));
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--focus));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply text-text font-semibold;
+  }
+
+  kbd {
+    @apply font-mono text-[10px] px-1.5 py-0.5 rounded-sm border border-line bg-surface2 text-muted;
+  }
+}
+
+@layer components {
+  .j2w-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+  .j2w-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .j2w-scroll::-webkit-scrollbar-track {
+    background: rgb(var(--surface-2));
+  }
+  .j2w-scroll::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-strong));
+    border-radius: 999px;
+    border: 2px solid rgb(var(--surface-2));
+  }
+  .j2w-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--subtle));
+  }
+
+  /* log / console panes scroll themselves, never the page */
+  .j2w-log {
+    overscroll-behavior: contain;
+  }
+
+  .theme-shift,
+  .theme-shift * {
+    transition: background-color var(--t-base) ease, border-color var(--t-base) ease,
+      color var(--t-base) ease, fill var(--t-base) ease, stroke var(--t-base) ease;
+  }
+
+  .card-grid {
+    display: grid;
+    gap: 16px;
+  }
+  .card-grid > * {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Print: always light, no shell, no shadows.
+-------------------------------------------------------------------------- */
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+    --bg: 255 255 255;
+    --surface: 255 255 255;
+    --surface-2: 245 247 250;
+    --surface-3: 237 242 247;
+    --line: 205 214 226;
+    --line-strong: 170 184 200;
+    --text: 15 30 46;
+    --muted: 80 96 116;
+    --subtle: 120 136 155;
+    --primary: 20 57 92;
+    --primary-soft: 232 239 246;
+    --on-primary: 255 255 255;
+    --accent: 170 110 10;
+    --accent-soft: 250 242 225;
+    --success: 24 100 62;
+    --success-soft: 232 246 238;
+    --danger: 165 45 34;
+    --danger-soft: 251 236 233;
+    --info: 26 95 152;
+    --info-soft: 234 243 251;
+    --ai: 88 58 165;
+    --ai-soft: 240 236 251;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+  }
+
+  body {
+    overflow: visible !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-flow {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+}
