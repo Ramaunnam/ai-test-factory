@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   FileLock2,
   Loader2,
@@ -21,6 +23,7 @@ import {
   DataTable,
   Disclosure,
   CodeBlock,
+  Modal,
   SectionTitle,
   StatTile,
 } from '@/components/ui'
@@ -29,6 +32,8 @@ import { JourneyBar } from '@/components/domain/JourneyBar'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { PROCESSES, RUNS, SCENARIOS } from '@/data'
+import { RUN_STEPS as DEMO_STEPS } from '@/data/runSteps'
+import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { store, useStore } from '@/data/appStore'
 import { useToast } from '@/providers/ToastProvider'
 import { useRole } from '@/providers/RoleProvider'
@@ -38,55 +43,6 @@ import { num } from '@/lib/format'
 const TABS = [
   { label: 'Runs', path: '/run' },
   { label: 'Evidence & Reports', path: '/evidence' },
-]
-
-type StepOutcome = 'pass' | 'fail' | 'healed' | 'blocked'
-
-interface RunStep {
-  scenario: string
-  stageId: string
-  text: string
-  system: string
-  outcome: StepOutcome
-  detail?: string
-  technical: string
-}
-
-const DEMO_STEPS: RunStep[] = [
-  { scenario: 'SC-001', stageId: 'P1-S1', text: 'Create a gate pass for VH-7741 at PL01', system: 'Yard Management', outcome: 'pass', technical: "page.goto('/yard/gate-pass/new')" },
-  { scenario: 'SC-001', stageId: 'P1-S1', text: 'Weigh gross 38 420 kg and tare 13 560 kg', system: 'Yard Management', outcome: 'pass', technical: "fill('#gross','38420'); fill('#tare','13560')" },
-  {
-    scenario: 'SC-001',
-    stageId: 'P1-S1',
-    text: 'Read the net weight from the ticket',
-    system: 'Yard Management',
-    outcome: 'healed',
-    detail: 'The field was renamed. Self-healing mapped netWeightKg to net_weight_kg with 96 % confidence and the step continued.',
-    technical: 'expect(payload.net_weight_kg ?? payload.netWeightKg).toBe(24860)',
-  },
-  { scenario: 'SC-001', stageId: 'P1-S2', text: 'Send the ticket on IF-01 and wait for SAP', system: 'SAP S/4HANA – Steel', outcome: 'pass', technical: 'queue.publish("IF-01", payload)' },
-  { scenario: 'SC-001', stageId: 'P1-S2', text: 'Check that exactly one goods receipt exists', system: 'SAP S/4HANA – Steel', outcome: 'pass', technical: "odata.get('/MSEG?$filter=xblnr eq {gatePass}')" },
-  {
-    scenario: 'SC-004',
-    stageId: 'P1-S2',
-    text: 'Compare the last 50 weighbridge tickets against SAP',
-    system: 'SAP S/4HANA – Steel',
-    outcome: 'fail',
-    detail: 'Three trucks were booked with the wrong weight. Two are a kilogram / tonne mix-up and one used a stale tare. Raised as finding F-001.',
-    technical: 'expect(abs(net_kg - menge)).toBeLessThan(20)',
-  },
-  {
-    scenario: 'SC-003',
-    stageId: 'P1-S3',
-    text: 'Capture an invoice with no purchase order',
-    system: 'Esker',
-    outcome: 'blocked',
-    detail: 'Blocked as expected. The three-way match parked the invoice with the reason “No purchase order reference”.',
-    technical: "payload.purchaseOrder = null",
-  },
-  { scenario: 'SC-002', stageId: 'P1-S4', text: 'Post a clean supplier invoice through the three-way match', system: 'SAP S/4HANA – Steel', outcome: 'pass', technical: 'sap.run("MIRO")' },
-  { scenario: 'SC-007', stageId: 'P1-S5', text: 'Check that Lasernet produced the invoice copy', system: 'Lasernet', outcome: 'pass', technical: 'await lasernet.poll(belnr)' },
-  { scenario: 'SC-008', stageId: 'P1-S5', text: 'Check that only posted invoices reached Reval', system: 'Reval', outcome: 'pass', technical: 'expect(reval.payments).toContainOnly(posted)' },
 ]
 
 const SPEED_MS: Record<string, number> = { '1x': 1100, '2x': 650, '4x': 320 }
@@ -103,6 +59,7 @@ export function RunCentrePage() {
   const [cursor, setCursor] = useState(-1)
   const [running, setRunning] = useState(false)
   const [runId, setRunId] = useState<string | null>(null)
+  const [shot, setShot] = useState<number | null>(null)
   const findingRaised = useRef(false)
 
   const filtered = SCENARIOS.filter(
@@ -330,11 +287,30 @@ export function RunCentrePage() {
                         </span>
                       )}
                       {state !== 'waiting' && (
+                        <span className="mt-2 block rounded-md border border-line bg-surface2/60 px-2.5 py-1.5 font-mono text-[11px]">
+                          {s.logs.map((l) => (
+                            <span key={l.at} className="flex flex-wrap gap-x-2">
+                              <span className="shrink-0 text-subtle">{l.at}</span>
+                              <span className="min-w-0 flex-1 text-text">{l.action}</span>
+                              <span className="shrink-0 text-muted">{l.result}</span>
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                      {state !== 'waiting' && (
                         <Disclosure summary="Technical detail" className="mt-2">
                           <CodeBlock className="max-h-24">{s.technical}</CodeBlock>
                         </Disclosure>
                       )}
                     </span>
+                    {state !== 'waiting' && (
+                      <StepScreenshot
+                        screen={s.screen}
+                        outcome={s.outcome}
+                        onClick={() => setShot(i)}
+                        className="hidden sm:block"
+                      />
+                    )}
                     {s.outcome === 'fail' && state === 'fail' && (
                       <Button size="sm" variant="danger" onClick={() => navigate('/finding/F-001')}>
                         F-001
@@ -411,6 +387,74 @@ export function RunCentrePage() {
           ]}
         />
       </Card>
+
+      <Modal
+        open={shot !== null}
+        onClose={() => setShot(null)}
+        width={760}
+        title={shot === null ? '' : `Step ${shot + 1} of ${DEMO_STEPS.length} · ${DEMO_STEPS[shot].text}`}
+        subtitle={
+          shot === null
+            ? undefined
+            : `${DEMO_STEPS[shot].system} · ${DEMO_STEPS[shot].scenario} · ${
+                DEMO_STEPS[shot].outcome === 'blocked' ? 'blocked as expected' : DEMO_STEPS[shot].outcome
+              }`
+        }
+        footer={
+          <>
+            <Button
+              leftIcon={<ChevronLeft size={15} />}
+              disabled={shot === 0}
+              onClick={() => setShot((i) => Math.max(0, (i ?? 0) - 1))}
+            >
+              Previous step
+            </Button>
+            <Button
+              variant="primary"
+              rightIcon={<ChevronRight size={15} />}
+              disabled={shot === DEMO_STEPS.length - 1}
+              onClick={() => setShot((i) => Math.min(DEMO_STEPS.length - 1, (i ?? 0) + 1))}
+            >
+              Next step
+            </Button>
+          </>
+        }
+      >
+        {shot !== null && (
+          <div className="space-y-3">
+            <StepScreenshot screen={DEMO_STEPS[shot].screen} outcome={DEMO_STEPS[shot].outcome} variant="large" />
+            {DEMO_STEPS[shot].detail && (
+              <p
+                className={cn(
+                  'text-sm',
+                  DEMO_STEPS[shot].outcome === 'fail'
+                    ? 'text-danger'
+                    : DEMO_STEPS[shot].outcome === 'healed'
+                      ? 'text-accent'
+                      : 'text-success',
+                )}
+              >
+                {DEMO_STEPS[shot].detail}
+              </p>
+            )}
+            <div>
+              <div className="mb-1.5 text-label font-semibold uppercase text-subtle">Log</div>
+              <div className="space-y-0.5 rounded-md border border-line bg-surface2 px-3 py-2 font-mono text-[11.5px]">
+                {DEMO_STEPS[shot].logs.map((l) => (
+                  <div key={l.at} className="flex flex-wrap gap-x-3">
+                    <span className="shrink-0 text-subtle">{l.at}</span>
+                    <span className="min-w-0 flex-1 text-text">{l.action}</span>
+                    <span className="shrink-0 text-muted">{l.result}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="text-[11px] text-subtle">
+              The screen is drawn from the step’s own values, so it always matches the data behind it.
+            </p>
+          </div>
+        )}
+      </Modal>
 
       <SectionTitle
         title="Findings"

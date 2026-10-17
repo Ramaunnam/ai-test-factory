@@ -4,6 +4,8 @@ import { ArrowLeft, Printer } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Badge, Button, Card, CardBody, CardHeader, DataTable, FieldGrid } from '@/components/ui'
 import { CHANGES, PROCESSES, RUNS, SCENARIOS } from '@/data'
+import { RUN_LOG_COUNT, RUN_STEPS } from '@/data/runSteps'
+import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { store, useStore } from '@/data/appStore'
 import { WorkflowFlow } from '@/components/domain/WorkflowFlow'
 import { num } from '@/lib/format'
@@ -371,7 +373,10 @@ export function EvidencePackPage() {
 
           <Card>
             <CardHeader title="What is inside" />
-            <CardBody>
+            <CardBody className="space-y-3">
+              <p className="rounded-md border border-line bg-surface2/60 px-3 py-2 text-sm text-text">
+                Contains {RUN_STEPS.length} steps, {RUN_STEPS.length} screenshots, {RUN_LOG_COUNT} log lines.
+              </p>
               <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
                 <li>Every step with its result, timestamp and the system it ran against</li>
                 <li>The payload of every interface message the run produced</li>
@@ -380,6 +385,49 @@ export function EvidencePackPage() {
                 <li>The findings raised, with the records affected</li>
                 <li>The approval trail: who approved what, and when</li>
               </ul>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Every step, with its screenshot and log"
+              subtitle={`${RUN_STEPS.length} steps · ${RUN_LOG_COUNT} log lines · screens drawn from each step’s own values`}
+            />
+            <CardBody className="space-y-3">
+              {RUN_STEPS.map((s, i) => (
+                <div key={`${s.scenario}-${i}`} className="rounded-md border border-line p-3">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[11px] text-subtle">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="font-mono text-[11px] text-subtle">{s.scenario}</span>
+                    <span className="min-w-0 flex-1 text-sm text-text">{s.text}</span>
+                    <Badge
+                      tone={
+                        s.outcome === 'fail'
+                          ? 'danger'
+                          : s.outcome === 'healed'
+                            ? 'warning'
+                            : s.outcome === 'blocked'
+                              ? 'info'
+                              : 'success'
+                      }
+                    >
+                      {s.outcome === 'blocked' ? 'blocked as expected' : s.outcome}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <StepScreenshot screen={s.screen} outcome={s.outcome} variant="large" className="sm:w-[320px]" />
+                    <div className="min-w-0 flex-1 space-y-0.5 rounded-md border border-line bg-surface2/60 px-3 py-2 font-mono text-[11px]">
+                      {s.logs.map((l) => (
+                        <div key={l.at} className="flex flex-wrap gap-x-3">
+                          <span className="shrink-0 text-subtle">{l.at}</span>
+                          <span className="min-w-0 flex-1 text-text">{l.action}</span>
+                          <span className="shrink-0 text-muted">{l.result}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </CardBody>
           </Card>
         </>
