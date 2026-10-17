@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CalendarDays, CheckCircle2, CircleAlert, Play, Rocket, Zap } from 'lucide-react'
+import { ArrowRight, CalendarDays, CheckCircle2, CircleAlert, Play, Printer, Rocket, Square, Zap } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   Badge,
@@ -10,6 +10,8 @@ import {
   CardHeader,
   Chip,
   DataTable,
+  EmptyState,
+  Input,
   LiveLog,
   Progress,
   SectionTitle,
@@ -339,10 +341,27 @@ export function ReleasePage() {
 /* Month-End Load                                                             */
 /* -------------------------------------------------------------------------- */
 
-type Profile = 'normal' | '2x' | '5x'
-const PROFILE_FACTOR: Record<Profile, number> = { normal: 1, '2x': 2, '5x': 5 }
+type Profile = 'normal' | 'peak' | '2x' | '5x' | 'custom'
 
-/** Per-interface capacity model. headroom is the multiplier at which it saturates. */
+const PROFILE_LABEL: Record<Profile, string> = {
+  normal: 'Normal day',
+  peak: 'Month-end peak',
+  '2x': '2x',
+  '5x': '5x',
+  custom: 'Custom',
+}
+
+const PROFILE_USERS: Record<Profile, number> = { normal: 40, peak: 150, '2x': 80, '5x': 200, custom: 120 }
+
+/** Forty virtual users is one times a normal day. */
+const USERS_PER_X = 40
+const P95_TARGET_MS = 2000
+const ERROR_TARGET_PCT = 1
+const BACKLOG_CLEAR_MIN = 15
+const RUN_POINTS = 40
+const RUN_TICK_MS = 500
+
+/** Modelled capacity per interface: headroom is the volume at which it saturates. */
 const LOAD_BASE: Record<string, { perMin: number; p95: number; headroom: number }> = {
   'IF-01': { perMin: 10, p95: 180, headroom: 6 },
   'IF-02': { perMin: 6, p95: 150, headroom: 7 },
@@ -355,15 +374,30 @@ const LOAD_BASE: Record<string, { perMin: number; p95: number; headroom: number 
   'IF-14': { perMin: 9, p95: 150, headroom: 6 },
 }
 
+/** What it means for the plant when this interface is the one that gives way. */
+const BOTTLENECK_IMPACT: Record<string, string> = {
+  'IF-01': 'Trucks wait at the gate because the goods receipt is not booked while they are still on the weighbridge.',
+  'IF-02': 'Recycling loads sit in the yard with nothing recorded against them.',
+  'IF-03': 'Stock in D365 lags the yard, so the month-end stock value is wrong on the day it is read.',
+  'IF-04': 'Production confirmations arrive late, so the shift report understates output.',
+  'IF-06': 'Supplier invoices queue behind the close, and the last ones miss the cut-off.',
+  'IF-09': 'Invoice copies are late, so the document archive is incomplete at the close.',
+  'IF-10': 'Mill certificates are late, which holds up dispatch.',
+  'IF-11': 'The payment run misses its slot and suppliers are paid a day late.',
+  'IF-14': 'Batches wait for their chemistry before they can be certified and charged.',
+}
+
 interface LoadRow {
   id: string
   name: string
   perMin: number
+  tps: number
+  avg: number
   p95: number
   errors: number
   backlog: number
   saturation: number
-  status: 'Comfortable' | 'At the limit' | 'Over capacity'
+  status: 'OK' | 'Watch' | 'Breaks'
 }
 
 function loadProfile(factor: number): LoadRow[] {
@@ -371,71 +405,149 @@ function loadProfile(factor: number): LoadRow[] {
     const saturation = factor / b.headroom
     const p95 = Math.round(b.p95 * (1 + Math.pow(saturation, 2) * 1.8))
     const backlog = saturation > 0.7 ? Math.round((saturation - 0.7) * b.perMin * 40) : 0
-    const errors = saturation > 0.9 ? Math.round((saturation - 0.9) * b.perMin * 6) : 0
+    const errors = saturation > 0.9 ? Math.round((saturation - 0.9) * b.perMin * 6 * 10) / 10 : 0
+    const perMin = Math.round(b.perMin * factor * 10) / 10
     return {
       id,
       name: INTERFACES.find((i) => i.id === id)?.name ?? id,
-      perMin: Math.round(b.perMin * factor * 10) / 10,
+      perMin,
+      tps: Math.round((perMin / 60) * 100) / 100,
+      avg: Math.round(p95 * 0.45),
       p95,
       errors,
       backlog,
       saturation,
-      status: saturation >= 1 ? 'Over capacity' : saturation >= 0.7 ? 'At the limit' : 'Comfortable',
+      status: saturation >= 1 ? 'Breaks' : saturation >= 0.7 ? 'Watch' : 'OK',
     }
   })
 }
 
+/** A month-end day hour by hour, as a share of that day's peak. Illustrative. */
+const MONTH_END_HOURS = [
+  0.18, 0.12, 0.1, 0.1, 0.14, 0.32, 0.55, 0.72, 0.84, 0.9, 0.96, 0.88, 0.7, 0.78, 0.92, 1, 0.95, 0.82, 0.64, 0.5,
+  0.42, 0.36, 0.3, 0.22,
+]
+
+interface LoadResult {
+  id: string
+  when: string
+  profile: string
+  users: number
+  p95: number
+  errorPct: number
+  backlog: number
+  lost: number
+  verdict: 'Holds' | 'Watch' | 'Breaks'
+}
+
+/** Three earlier load tests, kept so a new run has something to compare with. */
+const SEEDED_RESULTS: LoadResult[] = [
+  { id: 'LT-0312', when: '12 Oct 2026 21:10', profile: 'Month-end peak', users: 150, p95: 1480, errorPct: 0.4, backlog: 180, lost: 0, verdict: 'Watch' },
+  { id: 'LT-0311', when: '11 Oct 2026 20:40', profile: '2x', users: 80, p95: 640, errorPct: 0, backlog: 0, lost: 0, verdict: 'Holds' },
+  { id: 'LT-0310', when: '10 Oct 2026 22:05', profile: '5x', users: 200, p95: 2360, errorPct: 2.1, backlog: 720, lost: 2, verdict: 'Breaks' },
+]
+
 export function LoadPage() {
   const navigate = useNavigate()
-  const [profile, setProfile] = useState<Profile>('normal')
+  const toast = useToast()
+  const [profile, setProfile] = useState<Profile>('peak')
+  const [customUsers, setCustomUsers] = useState(120)
   const [running, setRunning] = useState(false)
   const [tick, setTick] = useState(0)
-  const [history, setHistory] = useState<Partial<Record<Profile, { p95: number; backlog: number; lost: number }>>>({})
-  const toast = useToast()
+  const [done, setDone] = useState(false)
+  const [history, setHistory] = useState<LoadResult[]>(SEEDED_RESULTS)
 
-  const factor = PROFILE_FACTOR[profile]
+  const users = profile === 'custom' ? Math.min(500, Math.max(10, customUsers)) : PROFILE_USERS[profile]
+  const factor = Math.round((users / USERS_PER_X) * 100) / 100
+
   const rows = useMemo(() => loadProfile(factor), [factor])
   const worst = [...rows].sort((a, b) => b.saturation - a.saturation)[0]
-  const over = rows.filter((r) => r.status === 'Over capacity')
-  const totalPerMin = rows.reduce((s, r) => s + r.perMin, 0)
+  const breaking = rows.filter((r) => r.status === 'Breaks')
+
+  const totalPerMin = Math.round(rows.reduce((s, r) => s + r.perMin, 0))
   const maxP95 = Math.max(...rows.map((r) => r.p95))
+  const avgMs = Math.round(rows.reduce((s, r) => s + r.avg, 0) / rows.length)
+  const errorsPerMin = Math.round(rows.reduce((s, r) => s + r.errors, 0) * 10) / 10
+  const errorPct = totalPerMin ? Math.round((errorsPerMin / totalPerMin) * 1000) / 10 : 0
   const totalBacklog = rows.reduce((s, r) => s + r.backlog, 0)
   const lost = factor >= 5 ? 2 : 0
-  const done = !running && tick >= 40
+  const minutesToClear = totalBacklog === 0 ? 0 : Math.ceil(totalBacklog / Math.max(1, totalPerMin * 0.12))
+
+  const verdict: LoadResult['verdict'] =
+    maxP95 > P95_TARGET_MS || errorPct > ERROR_TARGET_PCT || lost > 0
+      ? 'Breaks'
+      : totalBacklog > 0 || breaking.length > 0
+        ? 'Watch'
+        : 'Holds'
+
+  const targets = [
+    { label: `Slowest 5 % under ${P95_TARGET_MS / 1000} s`, met: maxP95 <= P95_TARGET_MS, actual: `${num(maxP95)} ms` },
+    { label: `Errors under ${ERROR_TARGET_PCT} %`, met: errorPct <= ERROR_TARGET_PCT, actual: `${errorPct} %` },
+    { label: 'No documents lost', met: lost === 0, actual: lost ? `${lost} invoices still in flight` : 'none lost' },
+    {
+      label: `Backlog cleared within ${BACKLOG_CLEAR_MIN} min`,
+      met: minutesToClear <= BACKLOG_CLEAR_MIN,
+      actual: totalBacklog ? `${num(totalBacklog)} waiting, about ${minutesToClear} min` : 'nothing waiting',
+    },
+  ]
 
   useEffect(() => {
     if (!running) return
-    const id = window.setInterval(() => setTick((t) => t + 1), 220)
+    const id = window.setInterval(() => setTick((t) => t + 1), RUN_TICK_MS)
     return () => window.clearInterval(id)
   }, [running])
 
   useEffect(() => {
-    if (!running || tick < 40) return
+    if (!running || tick < RUN_POINTS) return
     setRunning(false)
-    setHistory((h) => ({ ...h, [profile]: { p95: maxP95, backlog: totalBacklog, lost } }))
+    setDone(true)
+    const result: LoadResult = {
+      id: `LT-${String(313 + history.length - SEEDED_RESULTS.length)}`,
+      when: new Date().toLocaleString('en-GB'),
+      profile: profile === 'custom' ? `Custom · ${users} users` : PROFILE_LABEL[profile],
+      users,
+      p95: maxP95,
+      errorPct,
+      backlog: totalBacklog,
+      lost,
+      verdict,
+    }
+    setHistory((h) => [result, ...h].slice(0, 6))
     toast({
-      title: `Load run at ${profile === 'normal' ? 'a normal day' : profile} finished`,
-      description: over.length
-        ? `${over.length} ${over.length === 1 ? 'interface is' : 'interfaces are'} over capacity. ${worst.id} bends first.`
-        : 'Every interface stayed inside its capacity.',
-      tone: over.length ? 'danger' : 'success',
+      title: `Load test finished · ${verdict}`,
+      description:
+        verdict === 'Holds'
+          ? 'Every interface stayed inside its capacity.'
+          : `${worst.id} ${worst.name} gives way first.`,
+      tone: verdict === 'Holds' ? 'success' : verdict === 'Watch' ? 'warning' : 'danger',
     })
-  }, [running, tick, profile, maxP95, totalBacklog, lost, over.length, worst.id, toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, tick])
 
   const series = useMemo(
     () =>
-      Array.from({ length: Math.min(tick, 40) }, (_, i) => {
-        const wave = 1 + Math.sin(i / 5) * 0.12
+      Array.from({ length: Math.min(tick, RUN_POINTS) }, (_, i) => {
+        const ramp = Math.min(1, (i + 1) / 8)
+        const wave = 1 + Math.sin(i / 4) * 0.08
         return {
           minute: `${i}`,
-          throughput: Math.round(totalPerMin * wave),
-          p95: Math.round(maxP95 * (0.85 + Math.sin(i / 3) * 0.1)),
-          errors: rows.reduce((s, r) => s + r.errors, 0),
-          backlog: Math.round(totalBacklog * Math.min(1, i / 25)),
+          tpm: Math.round(totalPerMin * ramp * wave),
+          p95: Math.round(maxP95 * (0.75 + 0.25 * ramp) * wave),
+          avg: Math.round(avgMs * (0.8 + 0.2 * ramp) * wave),
+          errorPct: Math.round(errorPct * ramp * wave * 10) / 10,
         }
       }),
-    [tick, totalPerMin, maxP95, totalBacklog, rows],
+    [tick, totalPerMin, maxP95, avgMs, errorPct],
   )
+
+  const start = () => {
+    setTick(0)
+    setDone(false)
+    setRunning(true)
+  }
+
+  const liveUsers = running ? Math.round(users * Math.min(1, (tick + 1) / 8)) : done ? users : 0
+  const last = series[series.length - 1]
 
   return (
     <>
@@ -444,218 +556,373 @@ export function LoadPage() {
         subtitle="Push the month-end volume through the fourteen interfaces and find out which one bends first."
         tabs={TABS}
         actions={
-          <Button
-            variant="primary"
-            leftIcon={<Play size={15} />}
-            loading={running}
-            onClick={() => {
-              setTick(0)
-              setRunning(true)
-            }}
-          >
-            {running ? 'Running' : 'Run the load profile'}
-          </Button>
+          <>
+            <Button leftIcon={<Printer size={15} />} onClick={() => window.print()} disabled={!done}>
+              Print the report
+            </Button>
+            {running ? (
+              <Button variant="danger" leftIcon={<Square size={14} />} onClick={() => setRunning(false)}>
+                Stop
+              </Button>
+            ) : (
+              <Button variant="primary" leftIcon={<Play size={15} />} onClick={start}>
+                Run load test
+              </Button>
+            )}
+          </>
         }
       />
 
+      {/* ------------------------------------------------------- scenario */}
       <Card className="mb-4">
         <CardBody className="flex flex-wrap items-center gap-3">
-          <span className="text-label font-semibold uppercase text-subtle">Profile</span>
-          {(['normal', '2x', '5x'] as Profile[]).map((p) => (
-            <Chip key={p} selected={profile === p} onClick={() => { setProfile(p); setTick(0); setRunning(false) }}>
-              {p === 'normal' ? 'Normal day' : `${p} month-end`}
+          <span className="text-label font-semibold uppercase text-subtle">Scenario</span>
+          {(['normal', 'peak', '2x', '5x', 'custom'] as Profile[]).map((p) => (
+            <Chip
+              key={p}
+              selected={profile === p}
+              onClick={() => {
+                setProfile(p)
+                setTick(0)
+                setDone(false)
+                setRunning(false)
+              }}
+            >
+              {PROFILE_LABEL[p]}
             </Chip>
           ))}
+          {profile === 'custom' && (
+            <span className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={10}
+                max={500}
+                value={customUsers}
+                onChange={(e) => {
+                  setCustomUsers(Number(e.target.value))
+                  setTick(0)
+                  setDone(false)
+                }}
+                className="w-24"
+              />
+              <span className="text-xs text-muted">virtual users (10–500)</span>
+            </span>
+          )}
           <span className="ml-auto text-xs text-muted">
-            {running ? `minute ${Math.min(tick, 40)} of 40` : done ? 'run finished' : 'not started'}
+            {running
+              ? `running · second ${Math.min(Math.round((tick * RUN_TICK_MS) / 1000), 20)} of 20`
+              : done
+                ? 'run finished'
+                : `${users} virtual users · ${factor}x a normal day`}
           </span>
         </CardBody>
       </Card>
 
-      {(running || done) && (
-        <Card className="mb-4" tone={over.length ? 'danger' : 'success'}>
-          <CardBody className="flex flex-wrap items-center gap-4">
-            <Zap size={20} className={over.length ? 'text-danger' : 'text-success'} />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-text">
-                {over.length
-                  ? `${worst.id} ${worst.name} bends first`
-                  : `Every interface stayed inside its capacity at ${profile === 'normal' ? 'a normal day' : profile}`}
-              </div>
-              <p className="text-xs text-muted">
-                {over.length
-                  ? `It saturates at ${Math.round((1 / worst.saturation) * PROFILE_FACTOR[profile] * 10) / 10}x volume. At ${profile} it runs at ${Math.round(worst.saturation * 100)} % of capacity, p95 ${num(worst.p95)} ms, ${num(worst.backlog)} messages waiting.`
-                  : `The slowest is ${worst.id} at ${Math.round(worst.saturation * 100)} % of its capacity.`}
-              </p>
-            </div>
-            {over.length > 0 && (
-              <Button onClick={() => navigate(`/interfaces?interface=${worst.id}`)}>Open {worst.id}</Button>
-            )}
-          </CardBody>
-        </Card>
-      )}
-
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Throughput" value={`${num(totalPerMin)}/min`} tone="info" hint="across nine live interfaces" />
-        <StatTile label="Worst p95" value={`${num(maxP95)} ms`} tone={maxP95 > 800 ? 'danger' : maxP95 > 500 ? 'warning' : 'neutral'} hint="target is 800 ms" />
-        <StatTile label="Backlog at the cut-off" value={num(totalBacklog)} tone={totalBacklog ? 'danger' : 'success'} hint="target is zero" />
-        <StatTile label="Interfaces over capacity" value={`${over.length} of ${rows.length}`} tone={over.length ? 'danger' : 'success'} />
+      {/* ------------------------------------------------------------ KPIs */}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        <StatTile label="Virtual users" value={num(liveUsers)} hint={`${factor}x a normal day`} />
+        <StatTile
+          label="Transactions per minute"
+          value={last ? num(last.tpm) : '—'}
+          tone="info"
+          hint={`target ${num(totalPerMin)} at this volume`}
+        />
+        <StatTile label="Average response" value={last ? `${num(last.avg)} ms` : '—'} hint="across all interfaces" />
+        <StatTile
+          label="Slowest 5 %"
+          value={last ? `${num(last.p95)} ms` : '—'}
+          tone={maxP95 > P95_TARGET_MS ? 'danger' : maxP95 > P95_TARGET_MS * 0.6 ? 'warning' : 'neutral'}
+          hint={`target under ${P95_TARGET_MS / 1000} s`}
+        />
+        <StatTile
+          label="Error rate"
+          value={last ? `${last.errorPct} %` : '—'}
+          tone={errorPct > ERROR_TARGET_PCT ? 'danger' : errorPct > 0 ? 'warning' : 'success'}
+          hint={`target under ${ERROR_TARGET_PCT} %`}
+        />
+        <StatTile
+          label="Interfaces that break"
+          value={`${breaking.length} of ${rows.length}`}
+          tone={breaking.length ? 'danger' : 'success'}
+          hint={breaking.length ? breaking.map((r) => r.id).join(', ') : 'all inside capacity'}
+        />
       </div>
 
-      <div className="mb-4 grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Throughput and backlog" subtitle="Backlog is what has not drained yet. It must be zero at the cut-off." />
-          <CardBody>
-            <MultiLineChart
-              data={series}
-              reference={{ y: 0, label: 'backlog target', tone: 'success' }}
-              series={[
-                { key: 'throughput', label: 'Throughput', tone: 'primary' },
-                { key: 'backlog', label: 'Backlog', tone: 'danger' },
-              ]}
-            />
-          </CardBody>
+      {!running && !done ? (
+        <Card className="mb-4">
+          <EmptyState
+            icon={<Zap size={28} />}
+            title="No load test has run yet"
+            description={`Pick a scenario and run it. The ${users} virtual users ramp up over the first few seconds and the run takes about 20 seconds.`}
+            action={
+              <Button variant="primary" leftIcon={<Play size={15} />} onClick={start}>
+                Run load test
+              </Button>
+            }
+          />
         </Card>
-        <Card>
-          <CardHeader title="Response time and errors" subtitle="p95 in milliseconds against errors per minute." />
-          <CardBody>
-            <MultiLineChart
-              data={series}
-              reference={{ y: 800, label: 'p95 target 800 ms', tone: 'danger' }}
-              series={[
-                { key: 'p95', label: 'p95 ms', tone: 'accent' },
-                { key: 'errors', label: 'Errors', tone: 'danger' },
-              ]}
-            />
-          </CardBody>
-        </Card>
-      </div>
-
-      <Card className="mb-4">
-        <CardHeader
-          title="Interface by interface"
-          subtitle={`At ${profile === 'normal' ? 'a normal day' : `${profile} month-end volume`}, sorted by how much of its capacity each one is using.`}
-        />
-        <DataTable
-          rows={[...rows].sort((a, b) => b.saturation - a.saturation)}
-          rowKey={(r) => r.id}
-          onRowClick={(r) => navigate(`/interfaces?interface=${r.id}`)}
-          rowTone={(r) => (r.status === 'Over capacity' ? 'danger' : r.status === 'At the limit' ? 'warning' : undefined)}
-          columns={[
-            { key: 'id', header: 'Interface', mono: true, width: 100 },
-            { key: 'name', header: 'What it carries' },
-            { key: 'perMin', header: 'Per minute', align: 'right', mono: true, width: 110 },
-            { key: 'p95', header: 'p95 ms', align: 'right', mono: true, width: 100, render: (r) => <span className={r.p95 > 800 ? 'text-danger' : ''}>{num(r.p95)}</span> },
-            { key: 'errors', header: 'Errors/min', align: 'right', mono: true, width: 110 },
-            { key: 'backlog', header: 'Backlog', align: 'right', mono: true, width: 100 },
-            {
-              key: 'saturation',
-              header: 'Capacity used',
-              width: 170,
-              render: (r) => (
-                <span className="flex items-center gap-2">
-                  <Progress
-                    value={Math.min(100, r.saturation * 100)}
-                    tone={r.saturation >= 1 ? 'danger' : r.saturation >= 0.7 ? 'warning' : 'success'}
-                    className="w-20"
-                  />
-                  <span className="font-mono text-xs text-muted">{Math.round(r.saturation * 100)} %</span>
-                </span>
-              ),
-            },
-            {
-              key: 'status',
-              header: 'Status',
-              width: 140,
-              render: (r) => (
-                <Badge tone={r.status === 'Over capacity' ? 'danger' : r.status === 'At the limit' ? 'warning' : 'success'}>
-                  {r.status}
-                </Badge>
-              ),
-            },
-          ]}
-        />
-        <SourceNote
-          title="How the load model works"
-          reads={[
-            { label: 'Fourteen interfaces', route: '/landscape' },
-            { label: 'Observed message rates', route: '/interfaces' },
-          ]}
-          computes="each interface has a measured rate and a capacity; the profile multiplies the rate and the model reports where it saturates"
-          feeds={[{ label: 'Release exit criteria', route: '/release' }, { label: 'Finding F-008', route: '/finding/F-008' }]}
-          steps={[
-            'Each live interface carries a baseline rate per minute and the volume at which it saturates.',
-            'The profile multiplies the rate: a normal day, twice, or five times month-end volume.',
-            'p95, errors and backlog are derived from how far past its comfortable point each interface is pushed.',
-            'The first interface to pass 100 % of capacity is the one reported as bending first.',
-          ]}
-        />
-      </Card>
-
-      {done && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card tone={lost ? 'danger' : 'success'}>
-            <CardHeader title="Integrity after the run" subtitle="Every message that went in must come out exactly once." />
-            <CardBody className="space-y-2 text-sm">
-              <div className="grid grid-cols-3 gap-3">
-                <StatTile label="Sent" value={num(Math.round(totalPerMin * 40))} />
-                <StatTile label="Received" value={num(Math.round(totalPerMin * 40) - lost)} tone={lost ? 'warning' : 'success'} />
-                <StatTile label="Lost or stuck" value={num(lost)} tone={lost ? 'danger' : 'success'} />
-              </div>
-              {lost ? (
-                <p className="text-danger">
-                  Two invoices were still in flight on {worst.id} when the posting period closed, so they would post into
-                  the next period. This is finding F-008, and it is the reason the freeze cannot drop from 10 days to 3.
+      ) : (
+        <>
+          {/* --------------------------------------------------- bottleneck */}
+          <Card className="mb-4" tone={verdict === 'Holds' ? 'success' : verdict === 'Watch' ? 'warning' : 'danger'}>
+            <CardBody className="flex flex-wrap items-center gap-4">
+              <Zap size={20} className={verdict === 'Holds' ? 'text-success' : verdict === 'Watch' ? 'text-accent' : 'text-danger'} />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-text">
+                  {verdict === 'Holds'
+                    ? `Every interface holds at ${users} virtual users`
+                    : `${worst.id} ${worst.name} gives way first`}
+                </div>
+                <p className="text-xs text-muted">
+                  {verdict === 'Holds'
+                    ? `The busiest is ${worst.id} at ${Math.round(worst.saturation * 100)} % of its capacity.`
+                    : `${BOTTLENECK_IMPACT[worst.id] ?? 'It cannot keep up with the volume.'} It starts to struggle at about ${
+                        Math.round((1 / worst.saturation) * factor * 10) / 10
+                      }x a normal day.`}
                 </p>
-              ) : (
-                <p className="text-success">Nothing was lost, duplicated or left in flight.</p>
-              )}
-              {lost > 0 && (
-                <Button size="sm" onClick={() => navigate('/finding/F-008')}>
-                  Open F-008
-                </Button>
-              )}
+              </div>
+              <Button onClick={() => navigate(`/interfaces?interface=${worst.id}`)}>Open {worst.id}</Button>
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader title="Profiles measured so far" subtitle="Run each profile to compare them side by side." />
-            <CardBody>
+          {/* ------------------------------------------------------- charts */}
+          <div className="mb-4 grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader title="Response time" subtitle="Average and slowest 5 %, against the two second target." />
+              <CardBody>
+                <MultiLineChart
+                  data={series}
+                  reference={{ y: P95_TARGET_MS, label: 'target 2 s', tone: 'danger' }}
+                  series={[
+                    { key: 'p95', label: 'Slowest 5 % (ms)', tone: 'accent' },
+                    { key: 'avg', label: 'Average (ms)', tone: 'primary' },
+                  ]}
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardHeader title="Transactions per minute" subtitle="Everything moving across the live interfaces." />
+              <CardBody>
+                <MultiLineChart data={series} series={[{ key: 'tpm', label: 'Transactions per minute', tone: 'primary' }]} />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardHeader title="Error rate" subtitle="Rejected or retried, against the one per cent target." />
+              <CardBody>
+                <MultiLineChart
+                  data={series}
+                  reference={{ y: ERROR_TARGET_PCT, label: 'target 1 %', tone: 'danger' }}
+                  series={[{ key: 'errorPct', label: 'Errors (%)', tone: 'danger' }]}
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardHeader
+                title="Backlog per interface"
+                subtitle={totalBacklog ? `${num(totalBacklog)} messages waiting in total` : 'Nothing is waiting'}
+              />
+              <CardBody className="space-y-2">
+                {totalBacklog === 0 && <p className="text-sm text-success">Every interface drained as fast as it was fed.</p>}
+                {rows
+                  .filter((r) => r.backlog > 0)
+                  .sort((a, b) => b.backlog - a.backlog)
+                  .map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => navigate(`/interfaces?interface=${r.id}`)}
+                      className="flex w-full items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-surface2"
+                    >
+                      <span className="w-16 shrink-0 font-mono text-xs text-text">{r.id}</span>
+                      <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-surface2">
+                        <span
+                          className="block h-full rounded-full bg-danger"
+                          style={{ width: `${Math.min(100, (r.backlog / Math.max(1, totalBacklog)) * 100 * 2)}%` }}
+                        />
+                      </span>
+                      <span className="w-16 shrink-0 text-right font-mono text-xs text-text">{num(r.backlog)}</span>
+                    </button>
+                  ))}
+              </CardBody>
+            </Card>
+          </div>
+
+          {/* -------------------------------------------------- per system */}
+          <Card className="mb-4">
+            <CardHeader
+              title="Interface by interface"
+              subtitle={`At ${users} virtual users, sorted by how much of its capacity each one is using.`}
+            />
+            <DataTable
+              rows={[...rows].sort((a, b) => b.saturation - a.saturation)}
+              rowKey={(r) => r.id}
+              onRowClick={(r) => navigate(`/interfaces?interface=${r.id}`)}
+              rowTone={(r) => (r.status === 'Breaks' ? 'danger' : r.status === 'Watch' ? 'warning' : undefined)}
+              columns={[
+                { key: 'id', header: 'Interface', mono: true, width: 100 },
+                { key: 'name', header: 'What it carries' },
+                { key: 'tps', header: 'Peak TPS', align: 'right', mono: true, width: 100 },
+                {
+                  key: 'p95',
+                  header: 'p95 ms',
+                  align: 'right',
+                  mono: true,
+                  width: 100,
+                  render: (r) => <span className={r.p95 > P95_TARGET_MS ? 'text-danger' : ''}>{num(r.p95)}</span>,
+                },
+                {
+                  key: 'errors',
+                  header: 'Errors %',
+                  align: 'right',
+                  mono: true,
+                  width: 100,
+                  render: (r) => (r.perMin ? Math.round((r.errors / r.perMin) * 1000) / 10 : 0),
+                  value: (r) => (r.perMin ? r.errors / r.perMin : 0),
+                },
+                { key: 'backlog', header: 'Backlog', align: 'right', mono: true, width: 100 },
+                {
+                  key: 'saturation',
+                  header: 'Capacity used',
+                  width: 170,
+                  render: (r) => (
+                    <span className="flex items-center gap-2">
+                      <Progress
+                        value={Math.min(100, r.saturation * 100)}
+                        tone={r.saturation >= 1 ? 'danger' : r.saturation >= 0.7 ? 'warning' : 'success'}
+                        className="w-20"
+                      />
+                      <span className="font-mono text-xs text-muted">{Math.round(r.saturation * 100)} %</span>
+                    </span>
+                  ),
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  width: 110,
+                  render: (r) => (
+                    <Badge tone={r.status === 'Breaks' ? 'danger' : r.status === 'Watch' ? 'warning' : 'success'}>
+                      {r.status}
+                    </Badge>
+                  ),
+                },
+              ]}
+            />
+            <SourceNote
+              title="How the load model works"
+              reads={[
+                { label: 'Fourteen interfaces', route: '/landscape' },
+                { label: 'Observed message rates', route: '/interfaces' },
+              ]}
+              computes="Modelled from interface capacity: each interface has a measured rate and a capacity, and the scenario multiplies the rate"
+              feeds={[{ label: 'Release exit criteria', route: '/release' }, { label: 'Finding F-008', route: '/finding/F-008' }]}
+              steps={[
+                'Each live interface carries a measured rate per minute and a modelled capacity.',
+                'The scenario sets the number of virtual users; forty users is one times a normal day.',
+                'Response time, errors and backlog follow from how far past its comfortable point each interface is pushed.',
+                'The first interface to pass 100 % of capacity is the one reported as the bottleneck.',
+              ]}
+            />
+          </Card>
+
+          {/* ------------------------------------------------ result vs targets */}
+          <div className="mb-4 grid gap-4 lg:grid-cols-2">
+            <Card tone={verdict === 'Holds' ? 'success' : verdict === 'Watch' ? 'warning' : 'danger'}>
+              <CardHeader
+                title="Result against the targets"
+                subtitle="The four things a month-end run has to do."
+                actions={
+                  <Badge tone={verdict === 'Holds' ? 'success' : verdict === 'Watch' ? 'warning' : 'danger'}>
+                    {verdict}
+                  </Badge>
+                }
+              />
+              <CardBody className="space-y-2">
+                {targets.map((t) => (
+                  <div key={t.label} className="flex items-center gap-3 rounded-md border border-line px-3 py-2">
+                    {t.met ? (
+                      <CheckCircle2 size={15} className="shrink-0 text-success" />
+                    ) : (
+                      <CircleAlert size={15} className="shrink-0 text-danger" />
+                    )}
+                    <span className="min-w-0 flex-1 text-sm text-text">{t.label}</span>
+                    <span className={cn('shrink-0 font-mono text-xs', t.met ? 'text-muted' : 'text-danger')}>
+                      {t.actual}
+                    </span>
+                  </div>
+                ))}
+                {lost > 0 && (
+                  <Button size="sm" onClick={() => navigate('/finding/F-008')}>
+                    Open F-008
+                  </Button>
+                )}
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Last load tests"
+                subtitle="Kept so a new run can be compared with the last one."
+                actions={<Badge tone="neutral">Modelled</Badge>}
+              />
               <DataTable
-                rows={(['normal', '2x', '5x'] as Profile[]).map((p) => ({
-                  profile: p === 'normal' ? 'Normal day' : `${p} month-end`,
-                  key: p,
-                  ...(history[p] ?? { p95: 0, backlog: 0, lost: 0 }),
-                  measured: !!history[p],
-                }))}
-                rowKey={(r) => r.key}
+                rows={history.slice(0, 3)}
+                rowKey={(r) => r.id}
                 dense
-                rowTone={(r) => (r.measured && (r.lost > 0 || r.backlog > 0) ? 'danger' : undefined)}
+                rowTone={(r) => (r.verdict === 'Breaks' ? 'danger' : r.verdict === 'Watch' ? 'warning' : undefined)}
                 columns={[
-                  { key: 'profile', header: 'Profile' },
-                  { key: 'p95', header: 'Worst p95', align: 'right', mono: true, render: (r) => (r.measured ? `${num(r.p95)} ms` : '—') },
-                  { key: 'backlog', header: 'Backlog', align: 'right', mono: true, render: (r) => (r.measured ? num(r.backlog) : '—') },
-                  { key: 'lost', header: 'Lost', align: 'right', mono: true, render: (r) => (r.measured ? num(r.lost) : '—') },
+                  { key: 'id', header: 'Test', mono: true, width: 90 },
+                  { key: 'when', header: 'When', width: 160 },
+                  { key: 'profile', header: 'Scenario' },
+                  { key: 'users', header: 'Users', align: 'right', mono: true, width: 80 },
+                  { key: 'p95', header: 'p95 ms', align: 'right', mono: true, width: 90 },
                   {
-                    key: 'measured',
+                    key: 'verdict',
                     header: 'Verdict',
-                    width: 130,
-                    render: (r) =>
-                      !r.measured ? (
-                        <Badge tone="neutral">not measured</Badge>
-                      ) : r.lost || r.backlog ? (
-                        <Badge tone="danger">fails</Badge>
-                      ) : (
-                        <Badge tone="success">holds</Badge>
-                      ),
-                    value: (r) => (r.measured ? 1 : 0),
+                    width: 110,
+                    render: (r) => (
+                      <Badge tone={r.verdict === 'Breaks' ? 'danger' : r.verdict === 'Watch' ? 'warning' : 'success'}>
+                        {r.verdict}
+                      </Badge>
+                    ),
                   },
                 ]}
               />
-            </CardBody>
-          </Card>
-        </div>
+            </Card>
+          </div>
+        </>
       )}
+
+      {/* ------------------------------------------------------- heat strip */}
+      <Card>
+        <CardHeader
+          title="A month-end day, hour by hour"
+          subtitle="Where the volume sits on the last working day of the month. Illustrative."
+        />
+        <CardBody>
+          <div className="flex items-end gap-1">
+            {MONTH_END_HOURS.map((v, h) => (
+              <span
+                key={h}
+                title={`${String(h).padStart(2, '0')}:00 · ${Math.round(v * 100)} % of the day's peak`}
+                className="flex-1"
+              >
+                <span
+                  className={cn(
+                    'block rounded-sm',
+                    v >= 0.9 ? 'bg-danger' : v >= 0.7 ? 'bg-accent' : v >= 0.4 ? 'bg-info' : 'bg-surface3',
+                  )}
+                  style={{ height: `${Math.max(6, v * 56)}px` }}
+                />
+                {h % 3 === 0 && <span className="mt-1 block text-center font-mono text-[9px] text-subtle">{h}</span>}
+              </span>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            The peak sits between 14:00 and 17:00, when the yard, the invoices and the close all run together. That is
+            the window a load test has to survive.
+          </p>
+        </CardBody>
+      </Card>
     </>
   )
 }
