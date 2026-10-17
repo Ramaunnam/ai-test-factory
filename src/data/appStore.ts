@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
-import { HEALING, SCENARIOS, SYSTEMS } from './index'
+import { HEALING, SCENARIOS, SYSTEMS, type Scenario } from './index'
+import { SEED_RECORDINGS, type Recording, type RecordingStatus } from './recordings'
 
 export interface Finding {
   id: string
@@ -58,6 +59,8 @@ export interface RunRecord {
 
 interface State {
   findings: Finding[]
+  recordings: Recording[]
+  recordedScenarios: Scenario[]
   approvals: ApprovalItem[]
   connections: Connection[]
   scenarioStatus: Record<string, 'Approved' | 'Pending approval' | 'Rejected'>
@@ -127,6 +130,8 @@ function seedConnections(): Connection[] {
 class AppStore {
   state: State = {
     findings: SEED_FINDINGS,
+    recordings: SEED_RECORDINGS,
+    recordedScenarios: [],
     approvals: SEED_APPROVALS,
     connections: seedConnections(),
     scenarioStatus: Object.fromEntries(SCENARIOS.map((s) => [s.id, 'Approved' as const])),
@@ -188,6 +193,27 @@ class AppStore {
       s.approvals = [{ ...item, id, status: 'Pending' }, ...s.approvals]
     })
     return id
+  }
+
+  addRecording(recording: Recording) {
+    this.commit((s) => {
+      s.recordings = [recording, ...s.recordings]
+    })
+  }
+
+  setRecordingStatus(id: string, status: RecordingStatus, scenarioId?: string) {
+    this.commit((s) => {
+      s.recordings = s.recordings.map((r) => (r.id === id ? { ...r, status, scenarioId: scenarioId ?? r.scenarioId } : r))
+    })
+  }
+
+  /** A scenario the AI wrote from a recording, so it shows up in Scenarios. */
+  addRecordedScenario(scenario: Scenario) {
+    if (this.state.recordedScenarios.some((s) => s.id === scenario.id)) return
+    this.commit((s) => {
+      s.recordedScenarios = [scenario, ...s.recordedScenarios]
+      s.scenarioStatus = { ...s.scenarioStatus, [scenario.id]: 'Pending approval' }
+    })
   }
 
   setScenarioStatus(id: string, status: 'Approved' | 'Pending approval' | 'Rejected') {

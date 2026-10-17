@@ -115,7 +115,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
   {
     n: 1,
     name: 'Learn the process',
-    goesIn: 'Key-user screen recordings, the system log, the written procedures.',
+    goesIn: 'Key-user screen recordings from Test Studio → Record, the system log, the written procedures.',
     aiDoes: 'The discovery agent finds the real process, its steps and where rework happens.',
     comesOut: 'A process map.',
     checkedBy: 'Key User',
@@ -152,7 +152,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
     n: 3,
     name: 'Write the tests',
     goesIn: 'The approved map and its business rules.',
-    aiDoes: 'Writes positive, negative and re-test (regression) scenarios.',
+    aiDoes: 'Turns the recordings into tests and writes positive, negative and re-test (regression) scenarios.',
     comesOut: 'Scenarios waiting for approval.',
     checkedBy: 'Key User approves each one',
     requirements: [

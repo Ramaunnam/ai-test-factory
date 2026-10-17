@@ -29,6 +29,7 @@ const CoveragePage = page(ontology, 'CoveragePage')
 const DiscoveryPage = page(() => import('@/pages/Discovery'), 'DiscoveryPage')
 const StudioPage = page(studio, 'StudioPage')
 const TestDataPage = page(studio, 'TestDataPage')
+const RecordPage = page(studio, 'RecordPage')
 const LiveFlowPage = page(flow, 'LiveFlowPage')
 const SystemDataPage = page(flow, 'SystemDataPage')
 const LiveChecksPage = page(flow, 'LiveChecksPage')
@@ -65,6 +66,7 @@ export function AppRoutes() {
         <Route path="/discovery" element={<DiscoveryPage />} />
         <Route path="/studio" element={<StudioPage />} />
         <Route path="/test-data" element={<TestDataPage />} />
+        <Route path="/studio/record" element={<RecordPage />} />
         <Route path="/flow" element={<LiveFlowPage />} />
         <Route path="/flow/data" element={<SystemDataPage />} />
         <Route path="/flow/checks" element={<LiveChecksPage />} />

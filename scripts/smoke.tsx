@@ -94,6 +94,7 @@ const CASES: Case[] = [
   ['Process Discovery', '/discovery', '/discovery', discovery.DiscoveryPage],
   ['Test Studio / Scenarios', '/studio', '/studio', studio.StudioPage],
   ['Test Studio / Test Data', '/test-data', '/test-data', studio.TestDataPage],
+  ['Test Studio / Record', '/studio/record', '/studio/record', studio.RecordPage],
   ['Live Data Flow / Live Flow', '/flow', '/flow', flow.LiveFlowPage],
   ['Live Data Flow / System Data', '/flow/data', '/flow/data?system=sap-steel', flow.SystemDataPage],
   ['Live Data Flow / Live Checks', '/flow/checks', '/flow/checks', flow.LiveChecksPage],

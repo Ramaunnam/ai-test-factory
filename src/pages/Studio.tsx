@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, Database, Play, Sparkles, X } from 'lucide-react'
+import { Check, CircleDot, Database, MonitorPlay, Play, Sparkles, Square, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   Badge,
@@ -12,6 +12,7 @@ import {
   CodeBlock,
   DataTable,
   Disclosure,
+  EmptyState,
   LiveLog,
   SectionTitle,
   Select,
@@ -21,6 +22,8 @@ import {
 import { PageHeader } from '@/app/PageHeader'
 import { JourneyBar } from '@/components/domain/JourneyBar'
 import { PROCESSES, SCENARIOS, type Scenario } from '@/data'
+import { CONVERSION_LOG, RECORDED_ACTIONS, RECORDED_SCENARIO } from '@/data/recordings'
+import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { store, useStore } from '@/data/appStore'
 import { useDrawer } from '@/providers/DrawerProvider'
@@ -31,6 +34,7 @@ import { num } from '@/lib/format'
 const TABS = [
   { label: 'Scenarios', path: '/studio' },
   { label: 'Test Data', path: '/test-data' },
+  { label: 'Record', path: '/studio/record' },
 ]
 
 const GENERATED: Scenario[] = [
@@ -92,7 +96,10 @@ export function StudioPage() {
   const [generated, setGenerated] = useState<Scenario[]>([])
   const [rule, setRule] = useState(false)
 
-  const all = useMemo(() => [...generated, ...SCENARIOS], [generated])
+  const all = useMemo(
+    () => [...appState.recordedScenarios, ...generated, ...SCENARIOS],
+    [generated, appState.recordedScenarios],
+  )
   const forProcess = all.filter((s) => s.process === processId)
 
   const lines = [
@@ -499,6 +506,270 @@ export function TestDataPage() {
           />
         </Card>
       )}
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Record a key user                                                          */
+/* -------------------------------------------------------------------------- */
+
+type RecordPhase = 'idle' | 'recording' | 'captured' | 'converting' | 'converted'
+
+export function RecordPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const appState = useStore()
+  const [workflow, setWorkflow] = useState('P1')
+  const [system, setSystem] = useState('Yard Management')
+  const [phase, setPhase] = useState<RecordPhase>('idle')
+  const [count, setCount] = useState(0)
+
+  const captured = RECORDED_ACTIONS.slice(0, count)
+  const kept = RECORDED_ACTIONS.filter((a) => a.kind === 'action').length
+  const clock = captured.length ? captured[captured.length - 1].at : '00:00'
+  const sample = workflow !== 'P1'
+
+  useEffect(() => {
+    if (phase !== 'recording') return
+    if (count >= RECORDED_ACTIONS.length) {
+      setPhase('captured')
+      return
+    }
+    const id = window.setTimeout(() => setCount((c) => c + 1), 1100)
+    return () => window.clearTimeout(id)
+  }, [phase, count])
+
+  const start = () => {
+    setCount(0)
+    setPhase('recording')
+  }
+
+  const convert = () => {
+    setPhase('converting')
+    window.setTimeout(
+      () => {
+        store.addRecordedScenario(RECORDED_SCENARIO)
+        store.addRecording({
+          id: `RC-${104 + appState.recordings.length - 3}`,
+          name: 'Gate pass to release',
+          role: 'Gate operator',
+          workflow: `${workflow} ${PROCESSES.find((p) => p.id === workflow)?.name ?? ''}`.trim(),
+          system,
+          date: new Date().toLocaleDateString('en-GB'),
+          steps: RECORDED_ACTIONS.length,
+          status: 'Converted',
+          scenarioId: RECORDED_SCENARIO.id,
+        })
+        setPhase('converted')
+        toast({
+          title: `${RECORDED_SCENARIO.id} written from the recording`,
+          description: 'It is waiting for your approval in Scenarios.',
+          tone: 'info',
+          action: { label: 'Open it', onClick: () => navigate(`/studio?scenario=${RECORDED_SCENARIO.id}`) },
+        })
+      },
+      CONVERSION_LOG.length * 420 + 200,
+    )
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Record"
+        subtitle="Watch a key user do the work once. The AI turns that recording into a test."
+        tabs={TABS}
+        actions={
+          phase === 'recording' ? (
+            <Button variant="danger" leftIcon={<Square size={14} />} onClick={() => setPhase('captured')}>
+              Stop recording
+            </Button>
+          ) : (
+            <Button variant="primary" leftIcon={<CircleDot size={15} />} onClick={start}>
+              {phase === 'idle' ? 'Start recording' : 'Record again'}
+            </Button>
+          )
+        }
+      />
+
+      <Card className="mb-4">
+        <CardBody className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[220px]">
+            <label className="mb-1 block text-label font-semibold uppercase text-subtle">Workflow</label>
+            <Select value={workflow} onChange={(e) => setWorkflow(e.target.value)} disabled={phase === 'recording'}>
+              {PROCESSES.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.id} · {p.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="min-w-[220px]">
+            <label className="mb-1 block text-label font-semibold uppercase text-subtle">System</label>
+            <Select value={system} onChange={(e) => setSystem(e.target.value)} disabled={phase === 'recording'}>
+              {[
+                'Yard Management',
+                'Scrap Yard Operations',
+                'Laboratory app',
+                'SAP S/4HANA – Steel',
+                'Esker',
+                'D365 F&O – Recycling',
+              ].map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </Select>
+          </div>
+          {phase === 'recording' && (
+            <span className="flex items-center gap-2 text-sm">
+              <span className="h-2.5 w-2.5 animate-pulseDot rounded-full bg-danger" />
+              <span className="font-mono text-text">{clock}</span>
+              <span className="text-muted">recording · {captured.length} actions</span>
+            </span>
+          )}
+          {sample && (
+            <span className="ml-auto text-xs text-muted">Sample actions are shown for the gate-to-invoice path.</span>
+          )}
+        </CardBody>
+      </Card>
+
+      {phase === 'idle' && (
+        <Card className="mb-4">
+          <EmptyState
+            icon={<MonitorPlay size={28} />}
+            title="Nothing recorded yet"
+            description="Pick the workflow and the system, then record a key user doing the work once. Every click is captured with the screen it touched, and the AI writes the test from it."
+            action={
+              <Button variant="primary" leftIcon={<CircleDot size={15} />} onClick={start}>
+                Start recording
+              </Button>
+            }
+          />
+        </Card>
+      )}
+
+      {captured.length > 0 && (
+        <Card className="mb-4">
+          <CardHeader
+            title={phase === 'recording' ? 'Recording…' : `${captured.length} actions captured`}
+            subtitle="Every click, with the screen it touched. Pauses and mis-clicks are kept here and removed by the AI."
+            actions={
+              phase === 'captured' ? (
+                <Button variant="ai" leftIcon={<Sparkles size={15} />} onClick={convert}>
+                  Turn into a test with AI
+                </Button>
+              ) : undefined
+            }
+          />
+          <CardBody className="space-y-2">
+            {captured.map((a) => (
+              <div
+                key={a.n}
+                className={cn(
+                  'flex items-center gap-3 rounded-md border px-3 py-2',
+                  a.kind === 'action' ? 'border-line' : 'border-accent/40 bg-accent-soft/40',
+                )}
+              >
+                <span className="w-10 shrink-0 font-mono text-[11px] text-subtle">{a.at}</span>
+                <span className="min-w-0 flex-1 text-sm text-text">{a.action}</span>
+                <Badge tone={a.kind === 'action' ? 'neutral' : 'warning'}>
+                  {a.kind === 'action' ? 'action' : a.kind === 'wait' ? 'wait' : 'mis-click'}
+                </Badge>
+                <StepScreenshot screen={{ ...a.screen, system }} className="hidden sm:block" />
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      )}
+
+      {(phase === 'converting' || phase === 'converted') && (
+        <Card className="mb-4" tone="ai">
+          <CardHeader
+            title="Scenario Writer agent"
+            subtitle="Cleaning the recording up into a test that can run on its own."
+          />
+          <CardBody className="space-y-3">
+            <LiveLog lines={CONVERSION_LOG} running={phase === 'converting'} height={160} />
+            {phase === 'converted' && (
+              <>
+                <div className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-surface2/60 px-3 py-2.5 text-sm">
+                  <span className="font-mono text-text">{RECORDED_ACTIONS.length} recorded actions</span>
+                  <span className="text-subtle">→</span>
+                  <span className="font-mono text-success">{RECORDED_SCENARIO.steps.length} test steps</span>
+                  <span className="text-xs text-muted">
+                    {RECORDED_ACTIONS.length - kept} pauses and mis-clicks removed, 2 checks added
+                  </span>
+                  <Badge tone="warning" className="ml-auto">
+                    Pending approval
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="primary" onClick={() => navigate(`/studio?scenario=${RECORDED_SCENARIO.id}`)}>
+                    Open {RECORDED_SCENARIO.id} in Scenarios
+                  </Button>
+                  <Button leftIcon={<Play size={15} />} onClick={() => navigate('/run?demo=1')}>
+                    Play back in the Run Centre
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader title="Recordings" subtitle="What has been recorded so far, and what became of it." />
+        <DataTable
+          rows={appState.recordings}
+          rowKey={(r) => r.id}
+          onRowClick={(r) =>
+            r.scenarioId
+              ? navigate(`/studio?scenario=${r.scenarioId}`)
+              : toast({
+                  title: `${r.id} has not been turned into a test yet`,
+                  description: 'Record it again here, or convert it with the AI.',
+                  tone: 'info',
+                })
+          }
+          columns={[
+            { key: 'id', header: 'Recording', mono: true, width: 110 },
+            { key: 'name', header: 'What was recorded' },
+            { key: 'role', header: 'Role', width: 150 },
+            { key: 'workflow', header: 'Workflow', width: 220 },
+            { key: 'system', header: 'System', width: 180 },
+            { key: 'date', header: 'Recorded', width: 120 },
+            { key: 'steps', header: 'Actions', align: 'right', mono: true, width: 90 },
+            {
+              key: 'status',
+              header: 'Status',
+              width: 120,
+              render: (r) => (
+                <Badge tone={r.status === 'Approved' ? 'success' : r.status === 'Converted' ? 'info' : 'neutral'}>
+                  {r.status}
+                </Badge>
+              ),
+            },
+          ]}
+          empty="No recordings yet. Press Start recording above."
+        />
+        <SourceNote
+          title="Where a recorded test comes from"
+          reads={[
+            { label: 'Key-user recording', note: 'every click, with the screen it touched' },
+            { label: 'Process Ontology', route: '/ontology', note: 'the stage and the rule it belongs to' },
+          ]}
+          computes="removes waits and mis-clicks, swaps typed values for test data, and adds the checks the rule needs"
+          feeds={[
+            { label: 'Scenarios', route: '/studio' },
+            { label: 'Run Centre', route: '/run' },
+          ]}
+          steps={[
+            'A key user does the work once while the factory watches.',
+            'Pauses and mis-clicks are stripped out, because a test should not repeat them.',
+            'Typed values become test-data placeholders, so the test can run against generated records.',
+            'Checks are added from the rule the stage has to prove, and a key user approves the result.',
+          ]}
+        />
+      </Card>
     </>
   )
 }
