@@ -821,7 +821,7 @@ export function LoadPage() {
             <SourceNote
               title="How the load model works"
               reads={[
-                { label: 'Eighteen interfaces', route: '/landscape' },
+                { label: 'Nineteen interfaces', route: '/landscape' },
                 { label: 'Observed message rates', route: '/interfaces' },
               ]}
               computes="Modelled from interface capacity: each interface has a measured rate and a capacity, and the scenario multiplies the rate"

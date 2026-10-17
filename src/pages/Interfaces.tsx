@@ -435,8 +435,8 @@ export function InterfacesPage() {
       {!detail ? (
         <Card>
           <CardHeader
-            title={activeChips.length ? 'The interfaces that match' : 'All eighteen interfaces'}
-            subtitle="Thirteen carry live traffic; the other five are part of the landscape but quiet in this demo."
+            title={activeChips.length ? 'The interfaces that match' : 'All nineteen interfaces'}
+            subtitle="Fifteen carry live traffic; the other four are part of the landscape but quiet in this demo."
           />
           {filtered.length === 0 ? (
             <EmptyState
@@ -511,7 +511,7 @@ export function InterfacesPage() {
               description={
                 statuses.length
                   ? 'The status chips above are hiding every record this interface carried in the chosen time window.'
-                  : 'Thirteen of the eighteen interfaces carry live messages. This one is here for completeness of the landscape.'
+                  : 'Fifteen of the nineteen interfaces carry live messages. This one is here for completeness of the landscape.'
               }
               action={
                 <span className="flex flex-wrap gap-2">

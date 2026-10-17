@@ -168,6 +168,32 @@ export interface StockPosting {
   posted: number
 }
 
+/** D365 raises one quality order per tested batch, against the grade window. */
+export interface QualityOrder {
+  order: string
+  batch: string
+  grade: string
+  ni_pct: number | null
+  cr_pct: number | null
+  mo_pct: number | null
+  result: 'Pass' | 'Fail' | 'Incomplete'
+  created: number
+}
+
+/** A batch moved between the two recycling yards. */
+export interface Transfer {
+  transfer: string
+  batch: string
+  from_site: string
+  to_site: string
+  weight_kg: number
+  /** What D365 actually booked on arrival, or null while it is still moving. */
+  received_kg: number | null
+  unit: string
+  sent: number
+  received: number | null
+}
+
 export interface Heat {
   heat: string
   coils: number
@@ -247,6 +273,8 @@ export interface Db {
   lab_result: LabResult[]
   stock_posting: StockPosting[]
   issue: Issue[]
+  quality_order: QualityOrder[]
+  transfer: Transfer[]
   heat: Heat[]
   payment: Payment[]
   vat_check: VatCheck[]
@@ -262,9 +290,9 @@ export const SYSTEM_TABLES: Record<SystemId, TableName[]> = {
   'SAP Steel': ['EKPO', 'MSEG', 'RBKP', 'AFRU'],
   Esker: ['captured_invoice'],
   Lasernet: ['output_document'],
-  'Scrap Yard': ['receipt', 'scrap_batch', 'chemistry'],
+  'Scrap Yard': ['receipt', 'scrap_batch', 'chemistry', 'transfer'],
   Laboratory: ['lab_result'],
-  D365: ['stock_posting', 'issue'],
+  D365: ['stock_posting', 'issue', 'quality_order'],
   Mill: ['heat'],
   Reval: ['payment'],
   'VAT Service': ['vat_check'],

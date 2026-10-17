@@ -59,7 +59,7 @@ export const FAULTS: FaultDef[] = [
   {
     id: 'F6',
     label: 'Tonnes not converted to kilograms',
-    where: 'IF-03 Scrap Yard to D365',
+    where: 'IF-03 and IF-19 Scrap Yard to D365',
     breaks:
       'Received in tonnes at the yard, issued in kilograms in stock. The × 1000 step is skipped, so stock is 1 000 times wrong.',
     rate: 0.07,
@@ -113,6 +113,33 @@ const NOMINAL: Record<string, { ni: number; cr: number; mo: number }> = {
   'SCR-321-SHRED': { ni: 9.2, cr: 17.6, mo: 0.3 },
 }
 const VENDORS = ['VEND-1042', 'VEND-1043', 'VEND-1044', 'VEND-1045'] as const
+/** How far from nominal a grade may sit before the quality order fails. */
+export const GRADE_TOLERANCE = { ni: 0.28, cr: 0.38, mo: 0.095 }
+
+/** The window D365 judges a tested batch against, used by the live checks too. */
+export function gradeWindow(grade: string) {
+  const n = NOMINAL[grade]
+  if (!n) return null
+  return {
+    ni: [n.ni - GRADE_TOLERANCE.ni, n.ni + GRADE_TOLERANCE.ni] as const,
+    cr: [n.cr - GRADE_TOLERANCE.cr, n.cr + GRADE_TOLERANCE.cr] as const,
+    mo: [n.mo - GRADE_TOLERANCE.mo, n.mo + GRADE_TOLERANCE.mo] as const,
+  }
+}
+
+/** Pass, Fail or Incomplete for one set of measured values. */
+export function expectedQualityResult(
+  grade: string,
+  ni: number | null,
+  cr: number | null,
+  mo: number | null,
+): 'Pass' | 'Fail' | 'Incomplete' {
+  if (ni === null || cr === null || mo === null) return 'Incomplete'
+  const w = gradeWindow(grade)
+  if (!w) return 'Incomplete'
+  const inside = (v: number, range: readonly [number, number]) => v >= range[0] && v <= range[1]
+  return inside(ni, w.ni) && inside(cr, w.cr) && inside(mo, w.mo) ? 'Pass' : 'Fail'
+}
 const VAT_NUMBERS: Record<string, string> = {
   'VEND-1042': 'GB 418 7721 03',
   'VEND-1043': 'DE 274 118 902',
@@ -155,6 +182,8 @@ function emptyDb(): Db {
     lab_result: [],
     stock_posting: [],
     issue: [],
+    quality_order: [],
+    transfer: [],
     heat: [],
     payment: [],
     vat_check: [],
@@ -574,12 +603,12 @@ class SimEngine {
           weight_kg: netKg,
           received: this.now,
         })
-        this.at(this.rng.int(8, 25), () => this.sortation(receipt, netKg, gate_pass))
+        this.at(this.rng.int(8, 25), () => this.sortation(receipt, netKg, gate_pass, site))
       },
     })
   }
 
-  private sortation(receipt: string, weight: number, key: string) {
+  private sortation(receipt: string, weight: number, key: string, site: string) {
     const count = this.rng.int(1, 3)
     let left = weight
     for (let i = 0; i < count; i += 1) {
@@ -623,6 +652,8 @@ class SimEngine {
               tested: this.now,
             })
             if (noMo) this.log(`Chemistry for ${batch} arrived without molybdenum`, key, 'danger')
+            // D365 raises the quality order from the chemistry it was given
+            this.at(this.rng.int(3, 8), () => this.raiseQualityOrder(batch, grade, key))
           },
         })
       })
@@ -657,8 +688,31 @@ class SimEngine {
                 'danger',
               )
             }
+            // the self-billing document for the booked scrap purchase
+            this.send({
+              interfaceId: 'IF-13',
+              from: 'D365',
+              to: 'Lasernet',
+              key,
+              summary: `Self-billing document for ${batch}`,
+              payload: { interface: 'IF-13', journal: this.db.stock_posting[this.db.stock_posting.length - 1].journal, batch, document: 'Self-billing' },
+              travel: this.rng.int(2, 5),
+              effect: () => {
+                this.db.output_document.push({
+                  doc: this.id('LN-', 5),
+                  type: 'Self-billing document',
+                  ref: batch,
+                  created: this.now,
+                })
+              },
+            })
           },
         })
+
+        // roughly a third of the batches move to the other recycling yard
+        if (this.rng.chance(0.35)) {
+          this.at(this.rng.int(25, 70), () => this.transferBatch(batch, share, site, key))
+        }
 
         // the melt shop takes part or all of the batch, always in kilograms
         this.at(this.rng.int(20, 60), () => {
@@ -674,6 +728,73 @@ class SimEngine {
         })
       })
     }
+  }
+
+  /** D365 judges the measured chemistry against the window for the grade. */
+  private raiseQualityOrder(batch: string, grade: string, key: string) {
+    const chem = this.db.chemistry.find((c) => c.batch === batch)
+    if (!chem) return
+    const result = expectedQualityResult(grade, chem.ni_pct, chem.cr_pct, chem.mo_pct)
+    this.db.quality_order.push({
+      order: this.id('QO-', 5),
+      batch,
+      grade,
+      ni_pct: chem.ni_pct,
+      cr_pct: chem.cr_pct,
+      mo_pct: chem.mo_pct,
+      result,
+      created: this.now,
+    })
+    this.log(
+      result === 'Incomplete'
+        ? `D365 could not complete the quality order for ${batch}: the chemistry is incomplete`
+        : `D365 quality order for ${batch}: ${result} against ${grade}`,
+      key,
+      result === 'Pass' ? 'success' : result === 'Fail' ? 'warning' : 'danger',
+    )
+  }
+
+  /** A batch moved between the two recycling yards, booked in D365 on arrival. */
+  private transferBatch(batch: string, weight: number, from: string, key: string) {
+    const to = from === 'YD02' ? 'YD05' : 'YD02'
+    const transfer = this.id('TR-', 5)
+    const notConverted = this.fault('F6')
+    const sentQty = notConverted ? round2(weight / 1000) : weight
+    this.db.transfer.push({
+      transfer,
+      batch,
+      from_site: from,
+      to_site: to,
+      weight_kg: weight,
+      received_kg: null,
+      unit: 'KG',
+      sent: this.now,
+      received: null,
+    })
+    this.log(`${batch} sent from ${from} to ${to} (${fmt(weight)} kg)`, key)
+    this.send({
+      interfaceId: 'IF-19',
+      from: 'Scrap Yard',
+      to: 'D365',
+      key,
+      summary: `Stock transfer ${batch} · ${from} to ${to}`,
+      payload: { interface: 'IF-19', transfer, batch, fromSite: from, toSite: to, qty: sentQty, unit: 'KG' },
+      travel: this.rng.int(3, 9),
+      fault: notConverted ? 'F6' : undefined,
+      effect: () => {
+        const row = this.db.transfer.find((t) => t.transfer === transfer)
+        if (!row) return
+        row.received_kg = sentQty
+        row.received = this.now
+        if (notConverted) {
+          this.log(
+            `${to} received ${batch} as ${sentQty} KG instead of ${fmt(weight)} KG — tonnes were not converted`,
+            key,
+            'danger',
+          )
+        }
+      },
+    })
   }
 
   /** P4: mill heat. */
@@ -915,6 +1036,8 @@ class SimEngine {
     this.db.lab_result = keep(this.db.lab_result, (r) => r.tested)
     this.db.stock_posting = keep(this.db.stock_posting, (r) => r.posted)
     this.db.issue = keep(this.db.issue, (r) => r.issued)
+    this.db.quality_order = keep(this.db.quality_order, (r) => r.created)
+    this.db.transfer = keep(this.db.transfer, (r) => r.sent)
     this.db.heat = keep(this.db.heat, (r) => r.started)
     this.db.payment = keep(this.db.payment, (r) => r.run_at)
     this.db.vat_check = keep(this.db.vat_check, (r) => r.checked)

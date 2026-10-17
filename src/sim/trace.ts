@@ -1,4 +1,4 @@
-import { engine } from './engine'
+import { engine, expectedQualityResult } from './engine'
 import type { Message, SystemId, TableName } from './types'
 
 export interface TraceField {
@@ -403,6 +403,79 @@ export function trace(raw: string): TraceResult {
               ],
             })
           }
+          const order = db.quality_order.find((q) => q.batch === b.batch)
+          if (order) {
+            const incomplete = order.result === 'Incomplete'
+            const expected = expectedQualityResult(b.grade, order.ni_pct, order.cr_pct, order.mo_pct)
+            const wrong = !incomplete && order.result !== expected
+            if (incomplete) problems.push(`the quality order for ${b.batch} could not be completed`)
+            if (wrong) problems.push(`the quality order for ${b.batch} says ${order.result} but the values say ${expected}`)
+            records.push({
+              system: 'D365',
+              table: 'quality_order',
+              title: `Quality order ${order.order}`,
+              at: order.created,
+              flagged: incomplete || wrong,
+              fields: [
+                { label: 'Order', value: order.order },
+                { label: 'Batch', value: order.batch },
+                { label: 'Grade', value: order.grade },
+                { label: 'Result', value: order.result, flagged: incomplete || wrong },
+                {
+                  label: 'Expected',
+                  value: expected,
+                  note: incomplete ? 'the chemistry never arrived complete' : undefined,
+                },
+              ],
+            })
+          }
+
+          db.transfer
+            .filter((tr) => tr.batch === b.batch)
+            .forEach((tr) => {
+              const short = tr.received_kg !== null && Math.abs(tr.received_kg - tr.weight_kg) > 1
+              const stuck = tr.received_kg === null
+              if (short) {
+                problems.push(
+                  `${tr.to_site} booked ${tr.received_kg} ${tr.unit} for ${b.batch} instead of ${fmt(tr.weight_kg)} kg`,
+                )
+              }
+              records.push({
+                system: 'D365',
+                table: 'transfer',
+                title: `Transfer ${tr.transfer}`,
+                at: tr.sent,
+                flagged: short,
+                fields: [
+                  { label: 'Transfer', value: tr.transfer },
+                  { label: 'From', value: tr.from_site },
+                  { label: 'To', value: tr.to_site },
+                  { label: 'Sent', value: `${fmt(tr.weight_kg)} kg` },
+                  {
+                    label: 'Booked on arrival',
+                    value: stuck ? 'still moving' : `${fmt(tr.received_kg as number)} ${tr.unit}`,
+                    flagged: short,
+                  },
+                ],
+              })
+            })
+
+          const selfBilling = db.output_document.find((d) => d.ref === b.batch)
+          if (selfBilling) {
+            records.push({
+              system: 'Lasernet',
+              table: 'output_document',
+              title: `Output document ${selfBilling.doc}`,
+              at: selfBilling.created,
+              flagged: false,
+              fields: [
+                { label: 'Document', value: selfBilling.doc },
+                { label: 'Type', value: selfBilling.type },
+                { label: 'Reference', value: selfBilling.ref },
+              ],
+            })
+          }
+
           const stock = db.stock_posting.find((s) => s.batch === b.batch)
           if (stock) {
             const notConverted = Math.abs(stock.qty * 1000 - b.weight_kg) <= 20

@@ -1,4 +1,4 @@
-import { engine } from './engine'
+import { engine, expectedQualityResult, gradeWindow } from './engine'
 import type { FaultId, SystemId } from './types'
 
 export interface CheckRow {
@@ -159,18 +159,23 @@ where  r.status = 'Parked'`,
   },
   {
     id: 'C8',
-    title: 'Every posted invoice has its document copy',
-    sentence: 'A posted invoice must produce an output document in Lasernet.',
+    title: 'Every booking has its document in Lasernet',
+    sentence: 'A posted invoice must produce an invoice copy, and a booked scrap purchase a self-billing document.',
     process: 'P1',
     stage: 'Document output',
     interfaceId: 'IF-09',
     systems: ['SAP Steel', 'Lasernet'],
-    columns: ['Invoice', 'Document number', 'Gate pass', 'Output document'],
+    columns: ['Booking', 'Reference', 'What it needs', 'Output document'],
     faults: [],
-    sql: `select r.ext_invoice, r.belnr, r.gate_pass, d.doc
+    sql: `select r.ext_invoice, r.belnr, 'Invoice copy', d.doc
 from   sap.rbkp r
 left   join lasernet.output_document d on d.ref = r.belnr
-where  r.status = 'Posted' and d.doc is null`,
+where  r.status = 'Posted' and d.doc is null
+union  all
+select s.journal, s.batch, 'Self-billing document', d.doc
+from   d365.stock_posting s
+left   join lasernet.output_document d on d.ref = s.batch
+where  d.doc is null`,
   },
   {
     id: 'C9',
@@ -218,6 +223,36 @@ from   sap.rbkp r
 left   join fx.fx_rate f on f.pair = concat(r.currency, '/EUR') and f.day = day(r.posted)
 where  r.currency <> 'EUR'
 and    (f.rate is null or r.fx_rate_used <> f.rate)`,
+  },
+  {
+    id: 'C12',
+    title: 'Transfers arrive with the same weight',
+    sentence: 'A batch moved between the two recycling yards must be booked in D365 with the weight it left with.',
+    process: 'P2',
+    stage: 'Yard transfer',
+    interfaceId: 'IF-19',
+    systems: ['Scrap Yard', 'D365'],
+    columns: ['Transfer', 'Batch', 'From', 'To', 'Sent kg', 'Booked kg'],
+    faults: ['F6'],
+    sql: `select t.transfer, t.batch, t.from_site, t.to_site, t.weight_kg, t.received_kg
+from   scrap.transfer t
+where  t.received_kg is null or abs(t.received_kg - t.weight_kg) > 1`,
+  },
+  {
+    id: 'C13',
+    title: 'Every tested batch has a quality order with the right result',
+    sentence: 'D365 must raise a quality order for every tested batch, and judge it against the window for its grade.',
+    process: 'P2',
+    stage: 'Stock posting',
+    interfaceId: 'IF-03',
+    systems: ['Scrap Yard', 'D365'],
+    columns: ['Batch', 'Grade', 'Ni %', 'Cr %', 'Mo %', 'Quality order', 'Result'],
+    faults: ['F5'],
+    sql: `select c.batch, b.grade, c.ni_pct, c.cr_pct, c.mo_pct, q.order, q.result
+from   scrap.chemistry c
+join   scrap.scrap_batch b on b.batch = c.batch
+left   join d365.quality_order q on q.batch = c.batch
+where  q.order is null or q.result = 'Incomplete' or q.result <> expected(b.grade, c)`,
   },
 ]
 
@@ -448,7 +483,7 @@ export function runCheck(id: string): CheckResult {
     }
 
     case 'C8': {
-      const docs = new Set(db.output_document.map((d) => d.ref))
+      const docs = new Map(db.output_document.map((d) => [d.ref, d]))
       settled(
         db.RBKP.filter((r) => r.status === 'Posted'),
         (r) => r.posted,
@@ -458,8 +493,17 @@ export function runCheck(id: string): CheckResult {
         if (docs.has(r.belnr)) return
         rows.push({
           key: r.gate_pass,
-          cells: [r.ext_invoice, r.belnr, r.gate_pass, null],
+          cells: [r.ext_invoice, r.belnr, 'Invoice copy', null],
           why: 'The invoice is posted but Lasernet never produced the copy.',
+        })
+      })
+      settled(db.stock_posting, (sp) => sp.posted, 12).forEach((sp) => {
+        compared += 1
+        if (docs.has(sp.batch)) return
+        rows.push({
+          key: sp.batch,
+          cells: [sp.journal, sp.batch, 'Self-billing document', null],
+          why: 'D365 booked the scrap purchase but Lasernet never produced the self-billing document.',
         })
       })
       break
@@ -530,6 +574,47 @@ export function runCheck(id: string): CheckResult {
           why: before
             ? `The invoice was booked at ${r.fx_rate_used}, but the rate loaded for that day was ${before.rate}.`
             : `No exchange rate was loaded for ${pair} on that day, so the invoice used the rate of the day before.`,
+        })
+      })
+      break
+    }
+
+    case 'C12': {
+      settled(db.transfer, (t) => t.sent, 15).forEach((t) => {
+        compared += 1
+        if (t.received_kg !== null && Math.abs(t.received_kg - t.weight_kg) <= 1) return
+        rows.push({
+          key: t.batch,
+          cells: [t.transfer, t.batch, t.from_site, t.to_site, fmt(t.weight_kg), t.received_kg],
+          why:
+            t.received_kg === null
+              ? `The transfer left ${t.from_site} but nothing was ever booked at ${t.to_site}.`
+              : `${t.from_site} sent ${fmt(t.weight_kg)} kg, ${t.to_site} booked ${t.received_kg} KG — the tonnes were not converted.`,
+        })
+      })
+      break
+    }
+
+    case 'C13': {
+      const orders = new Map(db.quality_order.map((q) => [q.batch, q]))
+      const grades = new Map(db.scrap_batch.map((b) => [b.batch, b.grade]))
+      settled(db.chemistry, (c) => c.tested, 15).forEach((c) => {
+        const grade = grades.get(c.batch)
+        if (!grade) return
+        compared += 1
+        const order = orders.get(c.batch)
+        const expected = expectedQualityResult(grade, c.ni_pct, c.cr_pct, c.mo_pct)
+        if (order && expected !== 'Incomplete' && order.result === expected) return
+        const w = gradeWindow(grade)
+        rows.push({
+          key: c.batch,
+          cells: [c.batch, grade, c.ni_pct, c.cr_pct, c.mo_pct, order?.order ?? null, order?.result ?? null],
+          why: !order
+            ? 'The batch was tested but D365 never raised a quality order for it.'
+            : expected === 'Incomplete'
+              ? 'The chemistry is incomplete, so the quality order cannot say whether the batch meets its grade.'
+              : `D365 recorded ${order.result}, but the measured values are ${expected} against the window for ${grade}` +
+                (w ? ` (Ni ${w.ni[0].toFixed(2)}–${w.ni[1].toFixed(2)}).` : '.'),
         })
       })
       break

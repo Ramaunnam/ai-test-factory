@@ -309,12 +309,13 @@ export const INTERFACES: InterfaceMeta[] = [
   { id: 'IF-10', name: 'Mill certificate', from: 'mill', to: 'lasernet', live: true, method: 'File drop', frequency: 'Per heat', process: 'P4', payload: 'heat, coils' },
   { id: 'IF-11', name: 'Payment file', from: 'sap-steel', to: 'reval', live: true, method: 'SFTP', frequency: 'Hourly', process: 'P3', payload: 'invoices, count' },
   { id: 'IF-12', name: 'Charge plan', from: 'yard', to: 'mill', live: false, method: 'REST', frequency: 'Per shift', process: 'P4', payload: 'shift, grades, tonnage' },
-  { id: 'IF-13', name: 'Recycling documents', from: 'd365', to: 'lasernet', live: false, method: 'File drop', frequency: 'Per posting', process: 'P2', payload: 'journal, batch, document' },
+  { id: 'IF-13', name: 'Recycling documents', from: 'd365', to: 'lasernet', live: true, method: 'File drop', frequency: 'Per posting', process: 'P2', payload: 'journal, batch, document' },
   { id: 'IF-14', name: 'Chemistry result', from: 'lab', to: 'scrap', live: true, method: 'REST', frequency: 'Per sample', process: 'P2', payload: 'sample, batch, ni_pct, cr_pct, mo_pct' },
   { id: 'IF-15', name: 'VAT validation', from: 'sap-steel', to: 'vat', live: true, method: 'REST', frequency: 'Per invoice', process: 'P3', payload: 'belnr, vendor, vatNumber' },
   { id: 'IF-16', name: 'Sanctions screening', from: 'sap-steel', to: 'sanctions', live: true, method: 'REST', frequency: 'Per invoice', process: 'P3', payload: 'belnr, vendor, listDate' },
   { id: 'IF-17', name: 'Payment instruction', from: 'sap-steel', to: 'ebanking', live: true, method: 'SFTP', frequency: 'Hourly', process: 'P3', payload: 'payRun, count, amountEur' },
   { id: 'IF-18', name: 'Exchange rates', from: 'fx', to: 'sap-steel', live: true, method: 'REST', frequency: 'Daily at 06:00', process: 'P3', payload: 'pair, rate, date' },
+  { id: 'IF-19', name: 'Stock transfer', from: 'scrap', to: 'd365', live: true, method: 'OData', frequency: 'Per transfer', process: 'P2', payload: 'transfer, batch, fromSite, toSite, qty, unit' },
 ]
 
 export function interfaceById(id: string) {

@@ -60,7 +60,7 @@ export const NAV: NavItem[] = [
     group: 'OVERVIEW',
     path: '/landscape',
     roles: ALL,
-    blurb: 'Ten systems, four outside services, eighteen interfaces',
+    blurb: 'Ten systems, four outside services, nineteen interfaces',
   },
   {
     id: 'journey',

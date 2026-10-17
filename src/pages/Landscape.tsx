@@ -178,7 +178,7 @@ export function LandscapePage() {
     <>
       <PageHeader
         title="Enterprise Map"
-        subtitle="Ten systems, four outside finance services and eighteen interfaces. Thirteen of the interfaces carry live traffic in this demo."
+        subtitle="Ten systems, four outside finance services and nineteen interfaces. Fifteen of the interfaces carry live traffic in this demo."
         actions={
           <SegmentedControl
             value={view}
@@ -221,10 +221,10 @@ export function LandscapePage() {
               computes="counts the rows each system holds and the records the live checks disagree with"
               feeds={[{ label: 'Live Data Flow', route: '/flow' }, { label: 'Impact Simulator', route: '/simulator' }]}
               steps={[
-                'The landscape itself is fixed reference data: ten systems, four outside services and eighteen interfaces.',
+                'The landscape itself is fixed reference data: ten systems, four outside services and nineteen interfaces.',
                 'The record counts come from the live simulation, table by table.',
                 'A red border means a live check currently disagrees about rows in that system.',
-                'Thirteen of the eighteen interfaces carry live traffic; the rest are drawn dashed.',
+                'Fifteen of the nineteen interfaces carry live traffic; the rest are drawn dashed.',
               ]}
             />
           </Card>
