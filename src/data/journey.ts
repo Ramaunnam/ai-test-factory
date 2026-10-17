@@ -173,7 +173,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
     n: 4,
     name: 'Prepare test data',
     goesIn: 'The scenarios.',
-    aiDoes: 'Creates linked test records (vendor, order, vehicle, batch) that match each other across systems.',
+    aiDoes: 'Finds bad master data, then creates clean, linked test records (vendor, order, vehicle, batch) that match each other across systems.',
     comesOut: 'Test data loaded in the TEST environment.',
     checkedBy: 'QA Lead',
     requirements: [

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, CircleDot, Database, MonitorPlay, Play, Sparkles, Square, X } from 'lucide-react'
+import { Check, CircleDot, Database, MonitorPlay, Play, Search, Sparkles, Square, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   Badge,
@@ -23,6 +23,9 @@ import { PageHeader } from '@/app/PageHeader'
 import { JourneyBar } from '@/components/domain/JourneyBar'
 import { PROCESSES, SCENARIOS, type Scenario } from '@/data'
 import { CONVERSION_LOG, RECORDED_ACTIONS, RECORDED_SCENARIO } from '@/data/recordings'
+import { SAMPLE_PROBLEMS, SCAN_LOG, type MasterDataProblem } from '@/data/masterData'
+import { engine } from '@/sim/engine'
+import { useSimVersion } from '@/sim/useSim'
 import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { store, useStore } from '@/data/appStore'
@@ -34,6 +37,7 @@ import { num } from '@/lib/format'
 const TABS = [
   { label: 'Scenarios', path: '/studio' },
   { label: 'Test Data', path: '/test-data' },
+  { label: 'Master Data Check', path: '/studio/master-data' },
   { label: 'Record', path: '/studio/record' },
 ]
 
@@ -770,6 +774,276 @@ export function RecordPage() {
           ]}
         />
       </Card>
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Master data check                                                          */
+/* -------------------------------------------------------------------------- */
+
+export function MasterDataPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const version = useSimVersion()
+  const [phase, setPhase] = useState<'idle' | 'scanning' | 'done'>('idle')
+  const [cleanCopies, setCleanCopies] = useState<string[]>([])
+
+  /** The vehicle master really is out of date in the plant, so this part is live. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const live = useMemo(() => {
+    const db = engine.db
+    const byVehicle = new Map<string, { stored: number; weighed: number[]; gatePass: string }>()
+    db.weighbridge_ticket.forEach((t) => {
+      if (t.unit !== 'kg') return
+      const row = byVehicle.get(t.vehicle) ?? { stored: t.registered_tare_kg, weighed: [], gatePass: t.gate_pass }
+      row.stored = t.registered_tare_kg
+      row.weighed.push(t.tare_kg)
+      row.gatePass = t.gate_pass
+      byVehicle.set(t.vehicle, row)
+    })
+
+    const problems: MasterDataProblem[] = []
+    byVehicle.forEach((row, vehicle) => {
+      const average = Math.round(row.weighed.reduce((a, b) => a + b, 0) / row.weighed.length)
+      const drift = Math.abs(row.stored - average)
+      if (drift <= 500) return
+      problems.push({
+        id: `MD-${vehicle}`,
+        objectType: 'Vehicle',
+        object: vehicle,
+        system: 'Yard Management',
+        problem: `Stored empty weight ${num(row.stored)} kg, last weighed ${num(average)} kg — ${num(drift)} kg out.`,
+        risk: drift > 1000 ? 'High' : 'Medium',
+        fix: 'Re-weigh the vehicle empty and update the vehicle master, so a message that uses the stored weight is still right.',
+        live: true,
+        traceKey: row.gatePass,
+      })
+    })
+
+    return {
+      problems: problems.sort((a, b) => (a.risk === b.risk ? 0 : a.risk === 'High' ? -1 : 1)),
+      vehicles: byVehicle.size,
+      vendors: db.EKPO.length ? new Set(db.EKPO.map((e) => e.vendor)).size : 0,
+      orders: db.EKPO.length,
+      materials: new Set(db.scrap_batch.map((b) => b.grade)).size,
+    }
+  }, [version])
+
+  const problems = [...live.problems, ...SAMPLE_PROBLEMS]
+  const scanned = live.vehicles + live.vendors + live.orders + live.materials
+  const cleanPct = scanned ? Math.max(0, Math.round(((scanned - problems.length) / scanned) * 100)) : 100
+  const byType = (['Vehicle', 'Vendor', 'Purchase order', 'Material'] as const).map((t) => ({
+    type: t,
+    count: problems.filter((p) => p.objectType === t).length,
+  }))
+
+  const scan = () => {
+    setPhase('scanning')
+    window.setTimeout(() => setPhase('done'), SCAN_LOG.length * 420 + 200)
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Master Data Check"
+        subtitle="Bad master data makes a good test fail for the wrong reason. This finds it before the tests run."
+        tabs={TABS}
+        actions={
+          <Button variant="ai" leftIcon={<Search size={15} />} loading={phase === 'scanning'} onClick={scan}>
+            {phase === 'done' ? 'Scan again' : 'Scan master data'}
+          </Button>
+        }
+      />
+
+      {phase === 'idle' ? (
+        <Card>
+          <EmptyState
+            icon={<Database size={28} />}
+            title="Nothing scanned yet"
+            description="The scan reads the vehicle master, the vendors, the purchase orders and the materials, and lists anything that would make a test fail for the wrong reason."
+            action={
+              <Button variant="ai" leftIcon={<Search size={15} />} onClick={scan}>
+                Scan master data
+              </Button>
+            }
+          />
+        </Card>
+      ) : (
+        <>
+          <Card className="mb-4" tone="ai">
+            <CardHeader title="Master Data agent" subtitle="Reading the master records behind the tests." />
+            <CardBody>
+              <LiveLog lines={SCAN_LOG} running={phase === 'scanning'} height={150} />
+            </CardBody>
+          </Card>
+
+          {phase === 'done' && (
+            <>
+              <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatTile
+                  label="Records scanned"
+                  value={num(scanned)}
+                  hint={`${num(live.vehicles)} vehicles · ${num(live.vendors)} vendors · ${num(live.orders)} orders · ${num(live.materials)} materials`}
+                />
+                <StatTile
+                  label="Clean"
+                  value={`${cleanPct} %`}
+                  tone={cleanPct >= 90 ? 'success' : cleanPct >= 70 ? 'warning' : 'danger'}
+                  hint={`${num(problems.length)} records need attention`}
+                />
+                <StatTile
+                  label="High risk"
+                  value={num(problems.filter((p) => p.risk === 'High').length)}
+                  tone={problems.some((p) => p.risk === 'High') ? 'danger' : 'success'}
+                  hint="would break a test or a booking"
+                />
+                <StatTile
+                  label="Clean copies prepared"
+                  value={num(cleanCopies.length)}
+                  tone={cleanCopies.length ? 'info' : 'neutral'}
+                  hint="ready for the test environment"
+                  onClick={() => navigate('/test-data')}
+                />
+              </div>
+
+              <Card className="mb-4">
+                <CardHeader
+                  title="Problems by type"
+                  subtitle="Where the bad records sit."
+                  actions={<Badge tone="neutral">{num(problems.length)} in total</Badge>}
+                />
+                <CardBody className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  {byType.map((t) => (
+                    <div key={t.type} className="rounded-md border border-line px-3 py-2">
+                      <div className="text-label font-semibold uppercase text-subtle">{t.type}</div>
+                      <div className="font-mono text-lg font-semibold text-text">{num(t.count)}</div>
+                    </div>
+                  ))}
+                </CardBody>
+              </Card>
+
+              <Card>
+                <CardHeader
+                  title="What the scan found"
+                  subtitle="Live rows come from the running plant. Rows marked sample are authored for the demo."
+                />
+                <DataTable
+                  rows={problems}
+                  rowKey={(p) => p.id}
+                  maxHeight={520}
+                  rowTone={(p) => (p.risk === 'High' ? 'danger' : p.risk === 'Medium' ? 'warning' : undefined)}
+                  columns={[
+                    {
+                      key: 'object',
+                      header: 'Object',
+                      width: 190,
+                      render: (p) => (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[12.5px] text-text">{p.object}</span>
+                          {!p.live && <Badge tone="neutral">sample</Badge>}
+                          {cleanCopies.includes(p.id) && <Badge tone="info">clean copy ready</Badge>}
+                        </span>
+                      ),
+                    },
+                    { key: 'objectType', header: 'Type', width: 120 },
+                    { key: 'system', header: 'System', width: 180 },
+                    { key: 'problem', header: 'Problem' },
+                    {
+                      key: 'risk',
+                      header: 'Risk',
+                      width: 100,
+                      render: (p) => (
+                        <Badge tone={p.risk === 'High' ? 'danger' : p.risk === 'Medium' ? 'warning' : 'neutral'}>
+                          {p.risk}
+                        </Badge>
+                      ),
+                    },
+                    { key: 'fix', header: 'Suggested fix', render: (p) => <span className="text-xs text-muted">{p.fix}</span> },
+                    {
+                      key: 'actions',
+                      header: '',
+                      sortable: false,
+                      width: 210,
+                      render: (p) => (
+                        <span className="flex flex-wrap justify-end gap-1.5">
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (cleanCopies.includes(p.id)) {
+                                toast({ title: `A clean copy of ${p.object} is already prepared`, tone: 'info' })
+                                return
+                              }
+                              setCleanCopies((c) => [...c, p.id])
+                              toast({
+                                title: `Clean copy of ${p.object} prepared`,
+                                description: 'It will be used in the test environment instead of the broken record.',
+                                tone: 'success',
+                                action: { label: 'Open Test Data', onClick: () => navigate('/test-data') },
+                              })
+                            }}
+                          >
+                            Use clean copy
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const id = store.addFinding({
+                                title: `Master data: ${p.object} — ${p.problem}`,
+                                severity: p.risk === 'High' ? 'High' : 'Medium',
+                                status: 'Open',
+                                process: p.objectType === 'Vehicle' ? 'P1' : 'P3',
+                                stage: 'Master data',
+                                system: p.system,
+                                raised: new Date().toLocaleString('en-GB'),
+                                raisedBy: 'Master Data agent',
+                                detail: `${p.problem} ${p.fix}`,
+                                evidence: ['Master data scan', p.live ? 'Live plant records' : 'Sample record'],
+                                affectedKeys: p.traceKey ? [p.traceKey] : [],
+                              })
+                              toast({
+                                title: `Finding ${id} raised`,
+                                description: `${p.object} is now in the findings list.`,
+                                tone: 'warning',
+                                action: { label: 'Open it', onClick: () => navigate(`/finding/${id}`) },
+                              })
+                            }}
+                          >
+                            Raise finding
+                          </Button>
+                        </span>
+                      ),
+                    },
+                  ]}
+                  empty="Nothing to fix. Every master record the scan read is usable."
+                />
+                <SourceNote
+                  title="How the scan works"
+                  reads={[
+                    { table: 'weighbridge_ticket', note: 'the weights actually measured' },
+                    { table: 'EKPO', note: 'vendors and purchase orders' },
+                    { table: 'scrap_batch', note: 'the materials in use' },
+                  ]}
+                  computes="compares each stored master record against what the plant has recently recorded against it"
+                  feeds={[
+                    { label: 'Test Data', route: '/test-data' },
+                    { label: 'Findings', route: '/run' },
+                  ]}
+                  steps={[
+                    'The vehicle master is compared against the last weighings for that vehicle.',
+                    'Anything more than 500 kg out is reported, because a message that uses the stored weight would be wrong.',
+                    'Vendors, orders and materials are checked for missing fields and duplicates.',
+                    'A clean copy can be prepared for the test environment without touching the real record.',
+                  ]}
+                />
+              </Card>
+            </>
+          )}
+        </>
+      )}
     </>
   )
 }

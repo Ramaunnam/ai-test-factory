@@ -105,6 +105,7 @@ export const NAV: NavItem[] = [
     tabs: [
       { label: 'Scenarios', path: '/studio' },
       { label: 'Test Data', path: '/test-data' },
+      { label: 'Master Data Check', path: '/studio/master-data' },
       { label: 'Record', path: '/studio/record' },
     ],
   },
