@@ -70,7 +70,7 @@ having count(m.mblnr) <> 1`,
     stage: 'Gate receipt',
     interfaceId: 'IF-02',
     systems: ['Yard Management', 'Scrap Yard'],
-    columns: ['Gate pass', 'Vehicle', 'Site', 'Weighed kg', 'Receipt'],
+    columns: ['Gate pass', 'Vehicle', 'Site', 'Weighed', 'Receipt'],
     faults: ['F4'],
     sql: `select g.gate_pass, g.vehicle, g.site, t.net_kg, r.receipt
 from   yard.gate_pass g
@@ -111,18 +111,34 @@ where  c.batch is null or c.ni_pct is null or c.cr_pct is null or c.mo_pct is nu
   },
   {
     id: 'C6',
-    title: 'Stock is posted in kilograms with the batch weight',
-    sentence: 'D365 must hold the same quantity as the batch, in KG.',
+    title: 'Stock in kilograms matches the tonnes received',
+    sentence: 'The yard receives tonnes. D365 must hold the same material in kilograms: tonnes × 1 000.',
     process: 'P2',
     stage: 'Stock posting',
     interfaceId: 'IF-03',
     systems: ['Scrap Yard', 'D365'],
-    columns: ['Batch', 'Batch weight', 'Posted qty', 'Unit', 'Journal'],
+    columns: ['Batch', 'Received', 'Kilograms expected', 'Stock in D365', 'Journal'],
     faults: ['F6'],
     sql: `select b.batch, b.weight_kg, s.qty, s.unit, s.journal
 from   scrap.scrap_batch b
 left   join d365.stock_posting s on s.batch = b.batch
 where  s.journal is null or s.unit <> 'KG' or abs(s.qty - b.weight_kg) > 1`,
+  },
+  {
+    id: 'C6b',
+    title: 'Issued kilograms never exceed stock',
+    sentence: 'The melt shop cannot take out more kilograms than D365 shows in stock for that batch.',
+    process: 'P2',
+    stage: 'Stock posting',
+    interfaceId: 'IF-03',
+    systems: ['Scrap Yard', 'D365'],
+    columns: ['Batch', 'Issued kg', 'Stock in D365', 'Unit', 'Over by'],
+    faults: ['F6'],
+    sql: `select i.batch, sum(i.qty_kg) as issued, s.qty, s.unit
+from   d365.issue i
+join   d365.stock_posting s on s.batch = i.batch
+group  by i.batch, s.qty, s.unit
+having sum(i.qty_kg) > s.qty + 1`,
   },
   {
     id: 'C7',
@@ -256,10 +272,17 @@ export function runCheck(id: string): CheckResult {
       passes.forEach((g) => {
         compared += 1
         const r = receipts.get(g.gate_pass)
+        const ticket = tickets.get(g.gate_pass)
         if (r) return
         rows.push({
           key: g.gate_pass,
-          cells: [g.gate_pass, g.vehicle, g.site, tickets.get(g.gate_pass)?.net_kg ?? null, null],
+          cells: [
+            g.gate_pass,
+            g.vehicle,
+            g.site,
+            ticket ? `${ticket.net_kg} ${ticket.unit}` : null,
+            null,
+          ],
           why: 'The load was weighed at the gate but never reached Scrap Yard Operations.',
         })
       })
@@ -320,14 +343,49 @@ export function runCheck(id: string): CheckResult {
         compared += 1
         const s = stock.get(b.batch)
         if (s && s.unit === 'KG' && Math.abs(s.qty - b.weight_kg) <= 1) return
+        const tonnes = Math.round(b.weight_kg / 10) / 100
+        const notConverted = !!s && Math.abs(s.qty * 1000 - b.weight_kg) <= 20
         rows.push({
           key: receiptKey.get(b.receipt) ?? b.batch,
-          cells: [b.batch, b.weight_kg, s?.qty ?? null, s?.unit ?? null, s?.journal ?? null],
+          cells: [
+            b.batch,
+            `${tonnes} t`,
+            b.weight_kg,
+            s ? `${s.qty} ${s.unit}` : null,
+            s?.journal ?? null,
+          ],
           why: !s
             ? 'Nothing was posted to D365 for this batch.'
-            : s.unit !== 'KG'
-              ? `D365 holds ${fmt(s.qty)} ${s.unit}: the quantity is in kilograms but the unit says ${s.unit}.`
-              : 'The posted quantity does not match the batch weight.',
+            : notConverted
+              ? `Received ${tonnes} t, stock shows ${s.qty} ${s.unit} — not converted (should be ${fmt(b.weight_kg)} KG).`
+              : `D365 holds ${fmt(s.qty)} ${s.unit} against ${fmt(b.weight_kg)} kg received.`,
+        })
+      })
+      break
+    }
+
+    case 'C6b': {
+      const stock = new Map(db.stock_posting.map((s) => [s.batch, s]))
+      const batches = new Map(db.scrap_batch.map((b) => [b.batch, b]))
+      const receiptKey = new Map(db.receipt.map((r) => [r.receipt, r.gate_pass]))
+      const issuedByBatch = new Map<string, number>()
+      settled(db.issue, (i) => i.issued, 10).forEach((i) =>
+        issuedByBatch.set(i.batch, (issuedByBatch.get(i.batch) ?? 0) + i.qty_kg),
+      )
+      issuedByBatch.forEach((issued, batch) => {
+        const s = stock.get(batch)
+        // a missing stock booking is C6's business, not this check's
+        if (!s) return
+        compared += 1
+        if (issued <= s.qty + 1) return
+        const b = batches.get(batch)
+        const notConverted = !!b && Math.abs(s.qty * 1000 - b.weight_kg) <= 20
+        rows.push({
+          key: b ? (receiptKey.get(b.receipt) ?? batch) : batch,
+          cells: [batch, issued, `${s.qty} ${s.unit}`, s.unit, Math.round(issued - s.qty)],
+          why: notConverted
+            ? `The melt shop issued ${fmt(issued)} kg but D365 only shows ${s.qty} ${s.unit}, because the tonnes were never converted.`
+            : `The melt shop issued ${fmt(issued)} kg against ${fmt(s.qty)} ${s.unit} in stock.`,
         })
       })
       break

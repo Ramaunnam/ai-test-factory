@@ -153,7 +153,7 @@ export const PROCESSES: Process[] = [
         sop: ['Convert to stock keeping unit', 'Post to the warehouse', 'Confirm'],
         system: 'D365 F&O – Recycling',
         data: 'stock_posting',
-        rule: 'Stock is posted in KG with the batch weight',
+        rule: 'Tonnes received × 1 000 = kilograms in stock',
         agents: ['Reconciliation'],
         tests: 5,
         health: 'watch',

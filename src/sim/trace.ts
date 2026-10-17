@@ -164,14 +164,14 @@ export function trace(raw: string): TraceResult {
         at: ticket.weighed,
         flagged: false,
         fields: [
-          { label: 'Gross', value: `${fmt(ticket.gross_kg)} kg` },
-          { label: 'Tare (weighed)', value: `${fmt(ticket.tare_kg)} kg` },
+          { label: 'Gross', value: `${fmt(ticket.gross_kg)} ${ticket.unit}` },
+          { label: 'Tare (weighed)', value: `${fmt(ticket.tare_kg)} ${ticket.unit}` },
           {
             label: 'Tare (vehicle master)',
-            value: `${fmt(ticket.registered_tare_kg)} kg`,
+            value: `${fmt(ticket.registered_tare_kg)} ${ticket.unit}`,
             flagged: staleTare && gp.process === 'P1',
           },
-          { label: 'Net', value: `${fmt(ticket.net_kg)} kg` },
+          { label: 'Net', value: `${fmt(ticket.net_kg)} ${ticket.unit}` },
         ],
       })
     }
@@ -327,23 +327,49 @@ export function trace(raw: string): TraceResult {
           }
           const stock = db.stock_posting.find((s) => s.batch === b.batch)
           if (stock) {
-            const badUnit = stock.unit !== 'KG'
-            if (badUnit) problems.push(`D365 received ${b.batch} with unit ${stock.unit}`)
+            const notConverted = Math.abs(stock.qty * 1000 - b.weight_kg) <= 20
+            if (notConverted) {
+              problems.push(
+                `D365 holds ${stock.qty} ${stock.unit} for ${b.batch} instead of ${fmt(b.weight_kg)} kg`,
+              )
+            }
             records.push({
               system: 'D365',
               table: 'stock_posting',
               title: `Stock posting ${stock.journal}`,
               at: stock.posted,
-              flagged: badUnit,
+              flagged: notConverted,
               fields: [
                 { label: 'Journal', value: stock.journal },
                 { label: 'Batch', value: stock.batch },
-                { label: 'Quantity', value: fmt(stock.qty) },
-                { label: 'Unit', value: stock.unit, flagged: badUnit },
+                { label: 'Quantity', value: `${fmt(stock.qty)} ${stock.unit}`, flagged: notConverted },
+                { label: 'Expected', value: `${fmt(b.weight_kg)} KG` },
                 { label: 'Warehouse', value: stock.warehouse },
               ],
             })
           }
+          db.issue
+            .filter((i) => i.batch === b.batch)
+            .forEach((iss) => {
+              const over = !!stock && iss.qty_kg > stock.qty + 1
+              records.push({
+                system: 'D365',
+                table: 'issue',
+                title: `Issued to the melt shop ${iss.issue}`,
+                at: iss.issued,
+                flagged: over,
+                fields: [
+                  { label: 'Issue', value: iss.issue },
+                  { label: 'Batch', value: iss.batch },
+                  { label: 'Issued', value: `${fmt(iss.qty_kg)} ${iss.unit}`, flagged: over },
+                  {
+                    label: 'Stock at the time',
+                    value: stock ? `${fmt(stock.qty)} ${stock.unit}` : 'nothing booked',
+                    flagged: over,
+                  },
+                ],
+              })
+            })
         })
     }
   }

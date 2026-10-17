@@ -58,9 +58,10 @@ export const FAULTS: FaultDef[] = [
   },
   {
     id: 'F6',
-    label: 'Unit sent as TON',
+    label: 'Tonnes not converted to kilograms',
     where: 'IF-03 Scrap Yard to D365',
-    breaks: 'Stock is posted with unit TON while the quantity is in kilograms.',
+    breaks:
+      'Received in tonnes at the yard, issued in kilograms in stock. The × 1000 step is skipped, so stock is 1 000 times wrong.',
     rate: 0.07,
   },
   {
@@ -118,6 +119,7 @@ function emptyDb(): Db {
     chemistry: [],
     lab_result: [],
     stock_posting: [],
+    issue: [],
     heat: [],
     payment: [],
   }
@@ -274,6 +276,7 @@ class SimEngine {
       tare_kg: tare,
       net_kg: net,
       registered_tare_kg: registered,
+      unit: 'kg',
       weighed: this.now,
     })
     this.log(
@@ -468,9 +471,11 @@ class SimEngine {
           ? `CNU-${this.rng.int(1000000, 9999999)}`
           : `VH-${this.rng.int(1000, 9999)}`
     const gate_pass = `GP-${site}-2026-${String(this.rng.int(1000, 9999))}`
-    const gross = this.rng.step(26000, 68000, 20)
-    const tare = this.rng.step(9000, 22000, 20)
-    const net = gross - tare
+    // the recycling yard records in tonnes
+    const gross = round2(this.rng.step(26000, 68000, 20) / 1000)
+    const tare = round2(this.rng.step(9000, 22000, 20) / 1000)
+    const net = round2(gross - tare)
+    const netKg = Math.round(net * 1000)
 
     this.counters.vehicles += 1
     this.db.gate_pass.push({
@@ -491,9 +496,10 @@ class SimEngine {
       tare_kg: tare,
       net_kg: net,
       registered_tare_kg: tare,
+      unit: 't',
       weighed: this.now,
     })
-    this.log(`${vehicle} arrived at ${site} with ${fmt(net)} kg of scrap`, gate_pass)
+    this.log(`${vehicle} arrived at ${site} with ${net} t of scrap`, gate_pass)
 
     const lost = this.fault('F4')
     this.send({
@@ -501,22 +507,23 @@ class SimEngine {
       from: 'Yard Management',
       to: 'Scrap Yard',
       key: gate_pass,
-      summary: `Recycling receipt ${vehicle} · ${fmt(net)} kg`,
-      payload: { interface: 'IF-02', gatePass: gate_pass, vehicle, weightKg: net, site },
+      summary: `Recycling receipt ${vehicle} · ${net} t`,
+      payload: { interface: 'IF-02', gatePass: gate_pass, vehicle, weight: net, unit: 't', site },
       travel: this.rng.int(2, 6),
       lost,
       fault: lost ? 'F4' : undefined,
       effect: () => {
         const receipt = this.id('RC-', 5)
+        // Scrap Yard Operations converts the tonnes to kilograms
         this.db.receipt.push({
           receipt,
           gate_pass,
           vehicle,
           site,
-          weight_kg: net,
+          weight_kg: netKg,
           received: this.now,
         })
-        this.at(this.rng.int(8, 25), () => this.sortation(receipt, net, gate_pass))
+        this.at(this.rng.int(8, 25), () => this.sortation(receipt, netKg, gate_pass))
       },
     })
   }
@@ -571,28 +578,48 @@ class SimEngine {
 
       // IF-03 stock posting
       this.at(this.rng.int(5, 15), () => {
-        const ton = this.fault('F6')
+        const notConverted = this.fault('F6')
+        const qty = notConverted ? round2(share / 1000) : share
         this.send({
           interfaceId: 'IF-03',
           from: 'Scrap Yard',
           to: 'D365',
           key,
-          summary: `Stock posting ${batch} · ${fmt(share)} ${ton ? 'TON' : 'KG'}`,
-          payload: { interface: 'IF-03', batch, qty: share, unit: ton ? 'TON' : 'KG', warehouse: 'RAW' },
+          summary: `Stock posting ${batch} · ${fmt(qty)} KG`,
+          payload: { interface: 'IF-03', batch, qty, unit: 'KG', warehouse: 'RAW' },
           travel: this.rng.int(2, 5),
-          fault: ton ? 'F6' : undefined,
+          fault: notConverted ? 'F6' : undefined,
           effect: () => {
             this.db.stock_posting.push({
               journal: this.id('JR-', 5),
               batch,
               item: grade,
-              qty: share,
-              unit: ton ? 'TON' : 'KG',
+              qty,
+              unit: 'KG',
               warehouse: 'RAW',
               posted: this.now,
             })
-            if (ton) this.log(`D365 posted ${batch} with unit TON instead of KG`, key, 'danger')
+            if (notConverted) {
+              this.log(
+                `D365 booked ${batch} as ${qty} KG instead of ${fmt(share)} KG — tonnes were not converted`,
+                key,
+                'danger',
+              )
+            }
           },
+        })
+
+        // the melt shop takes part or all of the batch, always in kilograms
+        this.at(this.rng.int(20, 60), () => {
+          const issued = Math.min(share, this.rng.step(share * 0.4, share, 20))
+          this.db.issue.push({
+            issue: this.id('IS-', 5),
+            batch,
+            qty_kg: issued,
+            unit: 'KG',
+            issued: this.now,
+          })
+          this.log(`Melt shop issued ${fmt(issued)} kg from ${batch}`, key)
         })
       })
     }
@@ -725,6 +752,7 @@ class SimEngine {
     this.db.chemistry = keep(this.db.chemistry, (r) => r.tested)
     this.db.lab_result = keep(this.db.lab_result, (r) => r.tested)
     this.db.stock_posting = keep(this.db.stock_posting, (r) => r.posted)
+    this.db.issue = keep(this.db.issue, (r) => r.issued)
     this.db.heat = keep(this.db.heat, (r) => r.started)
     this.db.payment = keep(this.db.payment, (r) => r.run_at)
     this.messages = this.messages.filter((m) => m.arriveAt >= cutoff)

@@ -224,7 +224,7 @@ export interface InterfaceMeta {
 
 export const INTERFACES: InterfaceMeta[] = [
   { id: 'IF-01', name: 'Weighbridge ticket', from: 'yard', to: 'sap-steel', live: true, method: 'REST', frequency: 'Per vehicle', process: 'P1', payload: 'gatePass, vehicle, grossKg, tareKg, quantity, unit' },
-  { id: 'IF-02', name: 'Recycling receipt', from: 'yard', to: 'scrap', live: true, method: 'REST', frequency: 'Per vehicle', process: 'P2', payload: 'gatePass, vehicle, weightKg, site' },
+  { id: 'IF-02', name: 'Recycling receipt', from: 'yard', to: 'scrap', live: true, method: 'REST', frequency: 'Per vehicle', process: 'P2', payload: 'gatePass, vehicle, weight, unit, site' },
   { id: 'IF-03', name: 'Stock posting', from: 'scrap', to: 'd365', live: true, method: 'OData', frequency: 'Per batch', process: 'P2', payload: 'batch, qty, unit, warehouse' },
   { id: 'IF-04', name: 'Production confirmation', from: 'mill', to: 'sap-steel', live: true, method: 'File drop', frequency: 'Per heat', process: 'P4', payload: 'heat, coils, weightKg, delayMin' },
   { id: 'IF-05', name: 'Delivery note', from: 'sap-steel', to: 'lasernet', live: false, method: 'IDoc', frequency: 'Per delivery', process: 'P4', payload: 'delivery, customer, items' },

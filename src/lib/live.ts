@@ -17,6 +17,7 @@ const TIME_FIELD: Record<TableName, string | null> = {
   chemistry: 'tested',
   lab_result: 'tested',
   stock_posting: 'posted',
+  issue: 'issued',
   heat: 'started',
   payment: 'run_at',
 }
@@ -36,6 +37,7 @@ export const TABLE_LABEL: Record<TableName, string> = {
   chemistry: 'scrap.chemistry',
   lab_result: 'lims.lab_result',
   stock_posting: 'd365.stock_posting',
+  issue: 'd365.issue',
   heat: 'mill.heat',
   payment: 'reval.payment',
 }
@@ -116,7 +118,7 @@ export function plantPulse(minutes = 60) {
 /** Which live tables belong to each workflow, so a process can show real volume. */
 export const PROCESS_TABLES: Record<string, TableName[]> = {
   P1: ['gate_pass', 'weighbridge_ticket', 'MSEG', 'captured_invoice', 'RBKP', 'output_document', 'payment'],
-  P2: ['receipt', 'scrap_batch', 'chemistry', 'lab_result', 'stock_posting'],
+  P2: ['receipt', 'scrap_batch', 'chemistry', 'lab_result', 'stock_posting', 'issue'],
   P3: ['EKPO', 'MSEG', 'RBKP', 'payment'],
   P4: ['heat', 'AFRU', 'output_document'],
   P5: [],

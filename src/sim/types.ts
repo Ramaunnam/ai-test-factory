@@ -52,10 +52,12 @@ export interface WeighbridgeTicket {
   ticket: string
   gate_pass: string
   vehicle: string
+  /** The weights are held in `unit`: kilograms for steel, tonnes for recycling. */
   gross_kg: number
   tare_kg: number
   net_kg: number
   registered_tare_kg: number
+  unit: 'kg' | 't'
   weighed: number
 }
 
@@ -165,6 +167,14 @@ export interface Heat {
   started: number
 }
 
+export interface Issue {
+  issue: string
+  batch: string
+  qty_kg: number
+  unit: string
+  issued: number
+}
+
 export interface Payment {
   pay: string
   belnr: string
@@ -186,6 +196,7 @@ export interface Db {
   chemistry: Chemistry[]
   lab_result: LabResult[]
   stock_posting: StockPosting[]
+  issue: Issue[]
   heat: Heat[]
   payment: Payment[]
 }
@@ -199,7 +210,7 @@ export const SYSTEM_TABLES: Record<SystemId, TableName[]> = {
   Lasernet: ['output_document'],
   'Scrap Yard': ['receipt', 'scrap_batch', 'chemistry'],
   Laboratory: ['lab_result'],
-  D365: ['stock_posting'],
+  D365: ['stock_posting', 'issue'],
   Mill: ['heat'],
   Reval: ['payment'],
 }
