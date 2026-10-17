@@ -255,7 +255,11 @@ export function StudioPage() {
 
       {phase !== 'idle' && (
         <Card className="mb-4" tone="ai">
-          <CardHeader title="Scenario Writer agent" subtitle="Reading the ontology, the failing checks and the change feed." />
+          <CardHeader
+            title="Scenario Writer agent"
+            subtitle="Reading the ontology, the failing checks and the change feed."
+            actions={<Badge tone="info">Based on process map v{appState.mapVersion}</Badge>}
+          />
           <CardBody>
             <LiveLog lines={lines} running={phase === 'running'} height={150} />
           </CardBody>

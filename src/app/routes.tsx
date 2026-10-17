@@ -26,7 +26,10 @@ const LandscapePage = page(() => import('@/pages/Landscape'), 'LandscapePage')
 const OntologyPage = page(ontology, 'OntologyPage')
 const AgentsPage = page(ontology, 'AgentsPage')
 const CoveragePage = page(ontology, 'CoveragePage')
-const DiscoveryPage = page(() => import('@/pages/Discovery'), 'DiscoveryPage')
+const discovery = () => import('@/pages/Discovery')
+const DiscoveryPage = page(discovery, 'DiscoveryPage')
+const ProcessMapPage = page(discovery, 'ProcessMapPage')
+const ProcedureComparePage = page(discovery, 'ProcedureComparePage')
 const StudioPage = page(studio, 'StudioPage')
 const TestDataPage = page(studio, 'TestDataPage')
 const RecordPage = page(studio, 'RecordPage')
@@ -65,6 +68,8 @@ export function AppRoutes() {
         <Route path="/ontology/agents" element={<AgentsPage />} />
         <Route path="/coverage" element={<CoveragePage />} />
         <Route path="/discovery" element={<DiscoveryPage />} />
+        <Route path="/discovery/map" element={<ProcessMapPage />} />
+        <Route path="/discovery/compare" element={<ProcedureComparePage />} />
         <Route path="/studio" element={<StudioPage />} />
         <Route path="/test-data" element={<TestDataPage />} />
         <Route path="/studio/master-data" element={<MasterDataPage />} />

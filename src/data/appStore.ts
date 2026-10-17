@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { HEALING, SCENARIOS, SYSTEMS, type Scenario } from './index'
 import { SEED_RECORDINGS, type Recording, type RecordingStatus } from './recordings'
+import type { FeedbackStatus, ProcessFeedback } from './processMap'
 
 export interface Finding {
   id: string
@@ -59,6 +60,10 @@ export interface RunRecord {
 
 interface State {
   findings: Finding[]
+  /** True once the discovery agent has been run, so the map page knows. */
+  discoveryRun: boolean
+  processFeedback: ProcessFeedback[]
+  mapVersion: 1 | 2
   recordings: Recording[]
   recordedScenarios: Scenario[]
   approvals: ApprovalItem[]
@@ -127,9 +132,52 @@ function seedConnections(): Connection[] {
   }))
 }
 
+const SEED_FEEDBACK: ProcessFeedback[] = [
+  {
+    id: 'FB-01',
+    targetKind: 'Arrow',
+    targetId: 'A1',
+    target: 'Gate and weighbridge → Goods receipt',
+    verdict: 'Not right',
+    reason: 'Missing step',
+    comment:
+      'When the weight is more than 20 kg off the delivery note we ring the supplier before the vehicle leaves. That step is on the phone, so no system recorded it.',
+    by: 'Gate operator',
+    at: '13 Oct 2026 09:12',
+    status: 'Open',
+  },
+  {
+    id: 'FB-02',
+    targetKind: 'Stage',
+    targetId: 'M3',
+    target: 'Invoice capture',
+    verdict: 'Not right',
+    reason: 'Wrong system',
+    comment: 'We capture in Esker, not in SAP. SAP only sees it once Esker has sent it over.',
+    by: 'Accounts payable',
+    at: '13 Oct 2026 09:40',
+    status: 'Open',
+  },
+  {
+    id: 'FB-03',
+    targetKind: 'Stage',
+    targetId: 'M5',
+    target: 'Document output',
+    verdict: 'Not right',
+    reason: 'Wrong order',
+    comment: 'The invoice copy is only produced once the invoice is booked. The map has it the other way round.',
+    by: 'QA Lead',
+    at: '13 Oct 2026 10:05',
+    status: 'Open',
+  },
+]
+
 class AppStore {
   state: State = {
     findings: SEED_FINDINGS,
+    discoveryRun: false,
+    processFeedback: SEED_FEEDBACK,
+    mapVersion: 1,
     recordings: SEED_RECORDINGS,
     recordedScenarios: [],
     approvals: SEED_APPROVALS,
@@ -165,6 +213,40 @@ class AppStore {
   nextFindingId() {
     const n = this.state.findings.length + 1
     return `F-${String(n).padStart(3, '0')}`
+  }
+
+  /** Discovery has been run, so the map and the comparison have something to show. */
+  setDiscoveryRun() {
+    if (this.state.discoveryRun) return
+    this.commit((s) => {
+      s.discoveryRun = true
+    })
+  }
+
+  nextFeedbackId() {
+    return `FB-${String(this.state.processFeedback.length + 1).padStart(2, '0')}`
+  }
+
+  addProcessFeedback(input: Omit<ProcessFeedback, 'id'>) {
+    const id = this.nextFeedbackId()
+    this.commit((s) => {
+      s.processFeedback = [{ ...input, id }, ...s.processFeedback]
+    })
+    return id
+  }
+
+  setFeedbackStatus(id: string, status: FeedbackStatus) {
+    this.commit((s) => {
+      s.processFeedback = s.processFeedback.map((f) => (f.id === id ? { ...f, status } : f))
+    })
+  }
+
+  /** Every open correction is folded into the map, which becomes version 2. */
+  applyProcessFeedback() {
+    this.commit((s) => {
+      s.processFeedback = s.processFeedback.map((f) => (f.status === 'Open' ? { ...f, status: 'Applied' } : f))
+      s.mapVersion = 2
+    })
   }
 
   addFinding(input: Omit<Finding, 'id'>) {

@@ -92,6 +92,8 @@ const CASES: Case[] = [
   ['Ontology / Agents', '/ontology/agents', '/ontology/agents', ontology.AgentsPage],
   ['Ontology / Coverage', '/coverage', '/coverage', ontology.CoveragePage],
   ['Process Discovery', '/discovery', '/discovery', discovery.DiscoveryPage],
+  ['Process Discovery / Process map', '/discovery/map', '/discovery/map', discovery.ProcessMapPage],
+  ['Process Discovery / Compare', '/discovery/compare', '/discovery/compare', discovery.ProcedureComparePage],
   ['Test Studio / Scenarios', '/studio', '/studio', studio.StudioPage],
   ['Test Studio / Test Data', '/test-data', '/test-data', studio.TestDataPage],
   ['Test Studio / Master Data', '/studio/master-data', '/studio/master-data', studio.MasterDataPage],

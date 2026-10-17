@@ -127,14 +127,14 @@ export const JOURNEY_STEPS: JourneyStep[] = [
     inShort: 'Recordings, log, procedures',
     aiShort: 'Discovery agent',
     outShort: 'A process map',
-    opens: { label: 'Process Discovery', route: '/discovery' },
+    opens: { label: 'Process Discovery → Inputs', route: '/discovery' },
     logLine: 'Reading 6 recordings, the plant log and 4 written procedures…',
   },
   {
     n: 2,
     name: 'Confirm with key users',
     goesIn: 'The process map.',
-    aiDoes: "Redraws the map with the key users' corrections.",
+    aiDoes: "Takes Correct, Not right and comments on every box, arrow and loop, then redraws the map with the key users' corrections.",
     comesOut: 'An approved process map.',
     checkedBy: 'Key User',
     requirements: [
@@ -145,7 +145,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
     inShort: 'The process map',
     aiShort: 'Redraw with corrections',
     outShort: 'An approved map',
-    opens: { label: 'Process Discovery', route: '/discovery' },
+    opens: { label: 'Process Discovery → Process map', route: '/discovery/map' },
     logLine: 'Walking the map with the key users and folding in their corrections…',
   },
   {

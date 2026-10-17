@@ -93,6 +93,11 @@ export const NAV: NavItem[] = [
     path: '/discovery',
     roles: ['Key User', 'QA Lead'],
     blurb: 'Turn recorded sessions and logs into a process map',
+    tabs: [
+      { label: 'Inputs', path: '/discovery' },
+      { label: 'Process map', path: '/discovery/map' },
+      { label: 'Procedure vs reality', path: '/discovery/compare' },
+    ],
   },
   {
     id: 'studio',

@@ -1,6 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, FileText, MonitorPlay, Radar, RotateCcw, ScrollText, Sparkles } from 'lucide-react'
+import {
+  ArrowRight,
+  Check,
+  FileText,
+  MessageSquare,
+  MonitorPlay,
+  Radar,
+  RotateCcw,
+  ScrollText,
+  Sparkles,
+  X,
+} from 'lucide-react'
 import {
   Badge,
   Button,
@@ -9,21 +20,47 @@ import {
   CardHeader,
   CodeBlock,
   DataTable,
+  EmptyState,
   LiveLog,
   SectionTitle,
+  Select,
   StatTile,
+  Switch,
+  Textarea,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { JourneyBar } from '@/components/domain/JourneyBar'
-import { WorkflowFlow } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { DISCOVERY_SESSIONS, PROCESSES, type DiscoverySession } from '@/data'
+import { store, useStore } from '@/data/appStore'
+import {
+  APPLY_LOG,
+  DISCOVERY_LINES,
+  FEEDBACK_REASONS,
+  MAP_CORRECTIONS,
+  MAP_V1,
+  MAP_V2,
+  type CountKey,
+  type FeedbackReason,
+  type FeedbackVerdict,
+  type MapArrow,
+  type MapLoop,
+  type MapStage,
+  type ProcessFeedback,
+  type ProcessMapVersion,
+} from '@/data/processMap'
 import { engine } from '@/sim/engine'
 import { useSimVersion } from '@/sim/useSim'
 import { useThemeTokens } from '@/lib/useThemeTokens'
 import { fmtSim, num } from '@/lib/format'
 import { useDrawer } from '@/providers/DrawerProvider'
 import { useToast } from '@/providers/ToastProvider'
+
+const TABS = [
+  { label: 'Inputs', path: '/discovery' },
+  { label: 'Process map', path: '/discovery/map' },
+  { label: 'Procedure vs reality', path: '/discovery/compare' },
+]
 
 /* -------------------------------------------------------------------------- */
 /* The three inputs                                                           */
@@ -170,131 +207,29 @@ const PIPELINE = [
   },
 ]
 
-const LINES = [
-  'Reading 6 recorded key-user sessions (123 steps in total)…',
-  'Reading the plant log from Yard Management, SAP, Esker and the laboratory…',
-  'Reading 4 standard operating procedures…',
-  'Grouping steps into activities by screen and action…',
-  'Ordering activities by the timestamps in the log…',
-  'Found the happy path: gate pass → weighbridge → goods receipt → capture → match → post…',
-  'Found a rework loop: parked invoice → ask the yard → re-weigh → re-post (14 % of cases)…',
-  'Found a second loop: chemistry incomplete → re-sample (9 % of cases)…',
-  'Mapped 5 stages, 3 systems and 2 rework loops. Ready to write scenarios.',
-]
-
+/* -------------------------------------------------------------------------- */
+/* Tab 1 — the inputs                                                         */
 /* -------------------------------------------------------------------------- */
 
 export function DiscoveryPage() {
   const navigate = useNavigate()
-  const toast = useToast()
   const drawer = useDrawer()
   const version = useSimVersion()
-  const [phase, setPhase] = useState<'idle' | 'running' | 'done'>('idle')
+  const app = useStore()
+  const [running, setRunning] = useState(false)
+
+  const phase: 'idle' | 'running' | 'done' = running ? 'running' : app.discoveryRun ? 'done' : 'idle'
 
   /** The raw log is the plant's own event stream, so this page is never stale. */
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const logLines = useMemo(() => [...engine.events].reverse().slice(0, 40), [version])
 
-  /** Activities, counted against the live tables they were discovered from. */
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const activities = useMemo(() => {
-    const db = engine.db
-    const parked = db.RBKP.filter((r) => r.status === 'Parked').length
-    const noMo = db.chemistry.filter((c) => c.mo_pct === null).length
-    return [
-      { activity: 'Weigh a vehicle', occurrences: db.weighbridge_ticket.length, seconds: 210, systems: 'Yard Management', evidence: 'DS-01', rework: false, route: '/flow/data?system=yard&table=weighbridge_ticket' },
-      { activity: 'Book the goods receipt', occurrences: db.MSEG.length, seconds: 4, systems: 'SAP S/4HANA – Steel', evidence: 'DS-01, log', rework: false, route: '/flow/data?system=sap-steel&table=MSEG' },
-      { activity: 'Capture the supplier invoice', occurrences: db.captured_invoice.length, seconds: 320, systems: 'Esker', evidence: 'DS-02', rework: false, route: '/flow/data?system=esker&table=captured_invoice' },
-      { activity: 'Run the three-way match', occurrences: db.RBKP.length, seconds: 6, systems: 'SAP S/4HANA – Steel', evidence: 'DS-03, log', rework: false, route: '/flow/data?system=sap-steel&table=RBKP' },
-      { activity: 'Handle a parked invoice', occurrences: parked, seconds: 1680, systems: 'SAP, Yard Management', evidence: 'DS-03', rework: true, route: '/flow/checks' },
-      { activity: 'Sort a receipt into batches', occurrences: db.scrap_batch.length, seconds: 540, systems: 'Scrap Yard Operations', evidence: 'DS-04', rework: false, route: '/flow/data?system=scrap&table=scrap_batch' },
-      { activity: 'Release a laboratory sample', occurrences: db.lab_result.length, seconds: 420, systems: 'Laboratory app', evidence: 'DS-05', rework: false, route: '/flow/data?system=lab&table=lab_result' },
-      { activity: 'Re-sample after an incomplete result', occurrences: noMo, seconds: 900, systems: 'Laboratory, Scrap Yard', evidence: 'DS-05, log', rework: true, route: '/flow/checks' },
-      { activity: 'Confirm a heat', occurrences: db.AFRU.length, seconds: 90, systems: 'Mill, SAP', evidence: 'DS-06', rework: false, route: '/flow/data?system=sap-steel&table=AFRU' },
-    ]
-  }, [version])
-
-  const reworkCost = activities
-    .filter((a) => a.rework)
-    .reduce((s, a) => s + (a.occurrences * a.seconds) / 3600, 0)
-
-  /** What the written procedure promises, against what the systems actually did. */
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const gaps = useMemo(() => {
-    const db = engine.db
-    const byGatePass = new Map(db.MSEG.map((m) => [m.xblnr, m]))
-    const wrongWeight = db.weighbridge_ticket.filter((t) => {
-      const m = byGatePass.get(t.gate_pass)
-      return m && Math.abs(m.menge - t.net_kg) > 20
-    }).length
-    const noPo = db.captured_invoice.filter((c) => !c.po).length
-    const parked = db.RBKP.filter((r) => r.status === 'Parked').length
-    const batchMismatch = db.receipt.filter((r) => {
-      const sum = db.scrap_batch.filter((b) => b.receipt === r.receipt).reduce((n, b) => n + b.weight_kg, 0)
-      return sum > 0 && Math.abs(sum - r.weight_kg) > 1
-    }).length
-    const noMo = db.chemistry.filter((c) => c.mo_pct === null).length
-    return [
-      {
-        doc: 'SOP-114',
-        rule: 'Deviations above 20 kg against the weighbridge are reported',
-        observed: `${wrongWeight} goods receipts differ from the weighbridge by more than 20 kg`,
-        followed: wrongWeight === 0,
-        route: '/flow/checks',
-      },
-      {
-        doc: 'SOP-121',
-        rule: 'Every supplier invoice is captured with a purchase order reference',
-        observed: `${noPo} captures carry no purchase order`,
-        followed: noPo === 0,
-        route: '/flow/data?system=esker&table=captured_invoice',
-      },
-      {
-        doc: 'SOP-121',
-        rule: 'A quantity difference above 1 % parks the invoice for review',
-        observed: `${parked} invoices parked, which is the control working`,
-        followed: true,
-        route: '/flow/data?system=sap-steel&table=RBKP',
-      },
-      {
-        doc: 'SOP-203',
-        rule: 'Batch weights must add up to the weight received',
-        observed: batchMismatch === 0 ? 'No receipt lost weight in sortation' : `${batchMismatch} receipts do not add up`,
-        followed: batchMismatch === 0,
-        route: '/flow/data?system=scrap&table=scrap_batch',
-      },
-      {
-        doc: 'SOP-240',
-        rule: 'A result is only released when Ni, Cr and Mo are all present',
-        observed: `${noMo} chemistry records arrived without molybdenum`,
-        followed: noMo === 0,
-        route: '/flow/data?system=scrap&table=chemistry',
-      },
-    ]
-  }, [version])
-
-  /** How often the process runs clean, and how often it goes backwards. */
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const variants = useMemo(() => {
-    const db = engine.db
-    const invoices = db.RBKP.length
-    const parked = db.RBKP.filter((r) => r.status === 'Parked').length
-    const batches = db.scrap_batch.length
-    const noMo = db.chemistry.filter((c) => c.mo_pct === null).length
-    const cases = invoices + batches
-    const rework = parked + noMo
-    return [
-      { label: 'Straight through, no rework', count: Math.max(0, cases - rework), tone: 'success' as const, route: '/flow' },
-      { label: 'Invoice parked, yard re-weighs, invoice re-posted', count: parked, tone: 'danger' as const, route: '/flow/checks' },
-      { label: 'Chemistry incomplete, batch re-sampled', count: noMo, tone: 'warning' as const, route: '/flow/checks' },
-    ].map((v) => ({ ...v, pct: cases ? Math.round((v.count / cases) * 100) : 0 }))
-  }, [version])
-
-  const gapsOpen = gaps.filter((g) => !g.followed).length
-
   const runDiscovery = () => {
-    setPhase('running')
-    window.setTimeout(() => setPhase('done'), LINES.length * 420 + 200)
+    setRunning(true)
+    window.setTimeout(() => {
+      setRunning(false)
+      store.setDiscoveryRun()
+    }, DISCOVERY_LINES.length * 420 + 200)
   }
 
   /** One drawer definition, opened on its own or pushed on top of the list. */
@@ -479,8 +414,9 @@ export function DiscoveryPage() {
       <PageHeader
         title="Process Discovery"
         subtitle="Before a single test is written, the factory learns how the plant actually works: from recordings, the live system log and the written procedures."
+        tabs={TABS}
         actions={
-          <Button variant="ai" leftIcon={<Radar size={15} />} loading={phase === 'running'} onClick={runDiscovery}>
+          <Button variant="ai" leftIcon={<Radar size={15} />} loading={running} onClick={runDiscovery}>
             Discover the process
           </Button>
         }
@@ -497,7 +433,7 @@ export function DiscoveryPage() {
             onInput={(which) =>
               which === 'sessions' ? openAllSessions() : which === 'logs' ? openLogs() : openSops()
             }
-            onOutput={() => navigate('/ontology?process=P1')}
+            onOutput={() => navigate('/discovery/map')}
           />
         </CardBody>
         <SourceNote
@@ -509,8 +445,8 @@ export function DiscoveryPage() {
           ]}
           computes="groups clicks into activities, orders them by the log, and compares both against the written procedure"
           feeds={[
-            { label: 'Process Ontology', route: '/ontology' },
-            { label: 'Test Studio', route: '/studio' },
+            { label: 'Process map', route: '/discovery/map' },
+            { label: 'Procedure vs reality', route: '/discovery/compare' },
           ]}
           steps={PIPELINE.map((p) => `${p.title}: ${p.detail}`)}
         />
@@ -600,10 +536,11 @@ export function DiscoveryPage() {
           onClick={openLogs}
         />
         <StatTile
-          label="Rework loops found"
-          value={phase === 'done' ? '2' : '—'}
-          tone={phase === 'done' ? 'warning' : 'neutral'}
-          hint={phase === 'done' ? `about ${reworkCost.toFixed(1)} hours a day` : 'run discovery to find them'}
+          label="Process map"
+          value={phase === 'done' ? `v${app.mapVersion}` : '—'}
+          tone={phase === 'done' ? 'success' : 'neutral'}
+          hint={phase === 'done' ? 'open the process map' : 'run discovery to draw it'}
+          onClick={phase === 'done' ? () => navigate('/discovery/map') : undefined}
         />
       </div>
 
@@ -622,6 +559,7 @@ export function DiscoveryPage() {
             { key: 'minutes', header: 'Minutes', align: 'right', mono: true, width: 90 },
             { key: 'recorded', header: 'Recorded', width: 130 },
           ]}
+          empty="No recordings yet."
           footerNote={<span>recorded over three days in the test environment</span>}
         />
       </Card>
@@ -649,224 +587,25 @@ export function DiscoveryPage() {
         <Card className="mb-4" tone="ai">
           <CardHeader title="Discovery agent" subtitle="Turning clicks and log lines into a process." />
           <CardBody>
-            <LiveLog lines={LINES} running={phase === 'running'} height={200} />
+            <LiveLog lines={DISCOVERY_LINES} running={phase === 'running'} height={200} />
           </CardBody>
         </Card>
       )}
 
       {phase === 'done' && (
-        <>
-          <SectionTitle title="What discovery found" hint="Four minutes of reading, against three weeks of workshops." />
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <StatTile label="Stages mapped" value="5" hint="P1 Gate to Invoice" />
-            <StatTile label="Activities recognised" value={num(activities.length)} hint="named from clicks and log" />
-            <StatTile label="Rework loops" value="2" tone="warning" hint={`about ${reworkCost.toFixed(1)} hours a day`} />
-            <StatTile
-              label="Gaps against the procedure"
-              value={num(gapsOpen)}
-              tone={gapsOpen ? 'danger' : 'success'}
-              hint={`of ${gaps.length} rules checked`}
-            />
-            <StatTile
-              label="Scenarios it can write"
-              value="12"
-              tone="ai"
-              hint="positive, negative and regression"
-              onClick={() => navigate('/studio')}
-            />
-          </div>
-
-          <SectionTitle
-            title="The process it found"
-            hint="P1 Gate to Invoice as the plant actually runs it, not as the manual describes it."
-            actions={
-              <Button
-                variant="primary"
-                leftIcon={<Sparkles size={15} />}
-                onClick={() => {
-                  toast({ title: 'Opening Test Studio with this process selected', tone: 'info' })
-                  navigate('/studio')
-                }}
-              >
-                Generate scenarios
-              </Button>
-            }
+        <Card>
+          <CardHeader
+            title="The map is drawn"
+            subtitle="Discovery has finished. The next two tabs hold what it produced."
+            icon={<Sparkles size={16} className="text-ai" />}
           />
-          <Card className="mb-4">
-            <CardBody className="space-y-4 pt-5">
-              <WorkflowFlow process={PROCESSES[0]} onStageClick={(id) => navigate(`/ontology?process=P1&stage=${id}`)} />
-              <div className="grid gap-2 md:grid-cols-5">
-                {PROCESSES[0].stages.map((s, i) => {
-                  const session =
-                    DISCOVERY_SESSIONS.find((d) => d.stageIds.includes(s.id)) ??
-                    DISCOVERY_SESSIONS[Math.min(i, DISCOVERY_SESSIONS.length - 1)]
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => openSession(session)}
-                      className="rounded-md border border-line bg-surface2/50 px-2.5 py-2 text-left transition-colors hover:bg-surface2"
-                    >
-                      <span className="block text-[11px] font-medium text-text">{s.name}</span>
-                      <span className="block text-[11px] text-subtle">
-                        found in {session.id} · {12 + i * 9} log lines
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </CardBody>
-            <SourceNote
-              reads={[{ label: '6 recordings' }, { label: 'Plant event log', route: '/flow' }]}
-              computes="activities ordered into five stages, each traced back to the evidence it came from"
-              feeds={[
-                { label: 'Process Ontology', route: '/ontology?process=P1' },
-                { label: 'Test Studio', route: '/studio' },
-              ]}
-            />
-          </Card>
-
-          <Card className="mb-4">
-            <CardHeader
-              title="Activities it recognised"
-              subtitle="Counted against the live plant data, so these numbers move while you watch. Red rows are rework."
-            />
-            <DataTable
-              rows={activities}
-              rowKey={(a) => a.activity}
-              onRowClick={(a) => navigate(a.route)}
-              rowTone={(a) => (a.rework ? 'danger' : undefined)}
-              columns={[
-                { key: 'activity', header: 'Activity' },
-                { key: 'occurrences', header: 'Times today', align: 'right', mono: true, width: 120 },
-                {
-                  key: 'seconds',
-                  header: 'Typical duration',
-                  align: 'right',
-                  mono: true,
-                  width: 140,
-                  render: (a) => (a.seconds >= 60 ? `${Math.round(a.seconds / 60)} min` : `${a.seconds} s`),
-                  value: (a) => a.seconds,
-                },
-                { key: 'systems', header: 'Systems', width: 220 },
-                { key: 'evidence', header: 'Evidence', width: 130, mono: true },
-                {
-                  key: 'rework',
-                  header: 'Type',
-                  width: 110,
-                  render: (a) => <Badge tone={a.rework ? 'danger' : 'success'}>{a.rework ? 'Rework' : 'Normal'}</Badge>,
-                  value: (a) => (a.rework ? 1 : 0),
-                },
-              ]}
-            />
-            <SourceNote
-              reads={[{ table: 'weighbridge_ticket' }, { table: 'RBKP' }, { table: 'chemistry' }]}
-              computes="each discovered activity is counted against the live table it writes to"
-              feeds={[{ label: 'Scenario generation', route: '/studio' }]}
-              steps={[
-                'Discovery names an activity from the clicks and the log.',
-                'Each activity is matched to the table it creates rows in.',
-                'The count is read live, so the page shows today’s real volume rather than a stored figure.',
-                'Rework activities are the ones that only happen when something earlier went wrong.',
-              ]}
-            />
-          </Card>
-
-          <Card className="mb-4">
-            <CardHeader
-              title="What the procedure says, against what the systems actually did"
-              subtitle="Five written rules, each one measured against the live plant data."
-              actions={
-                <Badge tone={gapsOpen ? 'danger' : 'success'}>
-                  {gapsOpen} of {gaps.length} not followed
-                </Badge>
-              }
-            />
-            <DataTable
-              rows={gaps}
-              rowKey={(g, i) => `${g.doc}-${i}`}
-              onRowClick={(g) => navigate(g.route)}
-              rowTone={(g) => (g.followed ? undefined : 'danger')}
-              columns={[
-                { key: 'doc', header: 'Document', mono: true, width: 110 },
-                { key: 'rule', header: 'What the procedure says' },
-                { key: 'observed', header: 'What actually happened' },
-                {
-                  key: 'followed',
-                  header: 'Verdict',
-                  width: 140,
-                  render: (g) => (
-                    <Badge tone={g.followed ? 'success' : 'danger'}>{g.followed ? 'Followed' : 'Not followed'}</Badge>
-                  ),
-                  value: (g) => (g.followed ? 1 : 0),
-                },
-              ]}
-            />
-            <SourceNote
-              title="How the comparison is made"
-              reads={[
-                { label: '4 standard operating procedures', note: 'the written rules' },
-                { table: 'MSEG', note: 'what the systems actually recorded' },
-                { table: 'captured_invoice' },
-                { table: 'chemistry' },
-              ]}
-              computes="turns each written rule into a query and runs it against the last 24 hours of plant data"
-              feeds={[{ label: 'Live checks', route: '/flow/checks' }, { label: 'Test Studio', route: '/studio' }]}
-              steps={[
-                'A rule in a procedure is a sentence: something must always, or never, be true.',
-                'Discovery turns that sentence into a query over the tables the stage writes to.',
-                'The query runs against real data, so the verdict is evidence rather than opinion.',
-                'Rules that are broken become live checks and negative scenarios.',
-              ]}
-            />
-          </Card>
-
-          <Card className="mb-4">
-            <CardHeader
-              title="How often it runs clean"
-              subtitle="Every case the plant handled in the last 24 hours, split by the path it took."
-            />
-            <CardBody className="space-y-2.5">
-              {variants.map((v) => (
-                <button
-                  key={v.label}
-                  type="button"
-                  onClick={() => navigate(v.route)}
-                  className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface2"
-                >
-                  <span className="w-72 shrink-0 truncate text-xs text-text">{v.label}</span>
-                  <span className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface2">
-                    <span
-                      className={
-                        'block h-full rounded-full transition-[width] duration-500 ' +
-                        (v.tone === 'success' ? 'bg-success' : v.tone === 'danger' ? 'bg-danger' : 'bg-accent')
-                      }
-                      style={{ width: `${Math.max(2, v.pct)}%` }}
-                    />
-                  </span>
-                  <span className="w-12 shrink-0 text-right font-mono text-xs text-text">{v.pct} %</span>
-                  <span className="w-16 shrink-0 text-right font-mono text-[11px] text-subtle">{num(v.count)} cases</span>
-                </button>
-              ))}
-            </CardBody>
-            <SourceNote
-              reads={[{ table: 'RBKP' }, { table: 'chemistry' }, { table: 'scrap_batch' }]}
-              computes="counts how many cases went straight through against how many went backwards into rework"
-              feeds={[{ label: 'Rework cost', route: '/discovery' }]}
-            />
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Rework loops"
-              subtitle={`The two loops that appear in no procedure. They cost roughly ${reworkCost.toFixed(1)} hours a day across both plants.`}
-              icon={<RotateCcw size={16} className="text-accent" />}
-            />
-            <CardBody>
-              <ReworkDiagram />
-            </CardBody>
-          </Card>
-        </>
+          <CardBody className="flex flex-wrap gap-2">
+            <Button variant="primary" onClick={() => navigate('/discovery/map')}>
+              Open the process map
+            </Button>
+            <Button onClick={() => navigate('/discovery/compare')}>See the procedure against reality</Button>
+          </CardBody>
+        </Card>
       )}
     </>
   )
@@ -923,40 +662,1106 @@ function DiscoveryPipeline({
   )
 }
 
-function ReworkDiagram() {
-  const t = useThemeTokens()
-  const loops = [
-    { from: 'Invoice posting', to: 'Gate and weighbridge', label: 'parked invoice → re-weigh → re-post', pct: 14, y: 60 },
-    { from: 'Chemistry check', to: 'Sortation', label: 'chemistry incomplete → re-sample', pct: 9, y: 150 },
-  ]
-  return (
-    <svg viewBox="0 0 900 215" width="100%" height={215} className="min-w-[640px]">
-      {loops.map((l, i) => (
-        <g key={l.label}>
-          <path
-            d={`M 760 ${l.y} C 600 ${l.y + 58}, 260 ${l.y + 58}, 120 ${l.y}`}
-            fill="none"
-            stroke={i === 0 ? t.danger : t.accent}
-            strokeWidth={1.8}
-            strokeDasharray="6 5"
+/* -------------------------------------------------------------------------- */
+/* Tab 2 — the process map                                                    */
+/* -------------------------------------------------------------------------- */
+
+export function ProcessMapPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const drawer = useDrawer()
+  const version = useSimVersion()
+  const app = useStore()
+  const [running, setRunning] = useState(false)
+  const [applying, setApplying] = useState(false)
+  const [compare, setCompare] = useState(false)
+
+  const map = app.mapVersion === 2 ? MAP_V2 : MAP_V1
+  const applied = app.processFeedback.filter((f) => f.status === 'Applied').length
+  const open = app.processFeedback.filter((f) => f.status === 'Open').length
+
+  /** Every arrow and loop is counted against the plant, not against a stored figure. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const counts = useMemo<Record<CountKey, number>>(() => {
+    const db = engine.db
+    const byGatePass = new Map(db.MSEG.map((m) => [m.xblnr, m]))
+    const deviations = db.weighbridge_ticket.filter((t) => {
+      const m = byGatePass.get(t.gate_pass)
+      return m ? Math.abs(m.menge - t.net_kg) > 20 : false
+    }).length
+    return {
+      tickets: db.weighbridge_ticket.length,
+      deviations,
+      receipts: db.MSEG.length,
+      captures: db.captured_invoice.length,
+      parked: db.RBKP.filter((r) => r.status === 'Parked').length,
+      posted: db.RBKP.filter((r) => r.status === 'Posted').length,
+      documents: db.output_document.length,
+    }
+  }, [version])
+
+  const loopHours = map.loops.reduce((h, l) => h + (counts[l.count] * l.minutesEach) / 60, 0)
+
+  const runDiscovery = () => {
+    setRunning(true)
+    window.setTimeout(() => {
+      setRunning(false)
+      store.setDiscoveryRun()
+    }, DISCOVERY_LINES.length * 420 + 200)
+  }
+
+  /** One drawer for a box, an arrow or a loop. Feedback is always one click away. */
+  const openTarget = (targetKind: ProcessFeedback['targetKind'], targetId: string, target: string, body: ReactNode) =>
+    drawer.open({
+      title: target,
+      subtitle: `${targetKind} on process map v${map.version} · tell the factory whether this is right`,
+      width: 'lg',
+      content: (
+        <div className="space-y-4">
+          {body}
+          <FeedbackPanel
+            targetKind={targetKind}
+            targetId={targetId}
+            target={target}
+            existing={app.processFeedback.filter((f) => f.targetId === targetId)}
+            onDone={() => drawer.closeAll()}
           />
-          <rect x={300} y={l.y + 22} width={300} height={28} rx={14} fill={t.surface} stroke={t.line} />
-          <text x={316} y={l.y + 40} fontSize={11} fill={t.muted}>
-            {l.label}
-          </text>
-          <text x={612} y={l.y + 40} fontSize={11} fontFamily="JetBrains Mono, monospace" fill={i === 0 ? t.danger : t.accent}>
-            {l.pct} % of cases
-          </text>
-          <rect x={50} y={l.y - 16} width={140} height={32} rx={8} fill={t['surface-2']} stroke={t.line} />
-          <text x={64} y={l.y + 4} fontSize={11} fill={t.text}>
-            {l.to.length > 17 ? `${l.to.slice(0, 16)}…` : l.to}
-          </text>
-          <rect x={700} y={l.y - 16} width={150} height={32} rx={8} fill={t['surface-2']} stroke={t.line} />
-          <text x={714} y={l.y + 4} fontSize={11} fill={t.text}>
-            {l.from}
-          </text>
-        </g>
-      ))}
+        </div>
+      ),
+    })
+
+  const openStage = (s: MapStage) =>
+    openTarget(
+      'Stage',
+      s.id,
+      s.name,
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+            <div className="text-label font-semibold uppercase text-subtle">System</div>
+            <p className="mt-0.5 text-sm text-text">{s.system}</p>
+          </div>
+          <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+            <div className="text-label font-semibold uppercase text-subtle">On the clean path</div>
+            <p className="mt-0.5 text-sm text-text">{map.clean.includes(s.id) ? 'Yes' : 'No'}</p>
+          </div>
+        </div>
+        <p className="text-sm text-muted">{s.note}</p>
+        {s.added && (
+          <div className="rounded-md border border-accent/50 bg-accent-soft/40 px-3 py-2 text-xs text-muted">
+            This box was added by a key user. The agent never saw it, because the step happens on the phone.
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {s.stageId && (
+            <Button
+              onClick={() => {
+                drawer.closeAll()
+                navigate(`/ontology?process=P1&stage=${s.stageId}`)
+              }}
+            >
+              Open the rule behind it
+            </Button>
+          )}
+          <Button
+            onClick={() => {
+              drawer.closeAll()
+              navigate('/flow')
+            }}
+          >
+            Watch it happen live
+          </Button>
+        </div>
+      </div>,
+    )
+
+  const openArrow = (a: MapArrow) => {
+    const from = map.stages.find((s) => s.id === a.from)
+    const to = map.stages.find((s) => s.id === a.to)
+    openTarget(
+      'Arrow',
+      a.id,
+      `${from?.name ?? a.from} → ${to?.name ?? a.to}`,
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+            <div className="text-label font-semibold uppercase text-subtle">What moves</div>
+            <p className="mt-0.5 text-sm text-text">{a.label}</p>
+          </div>
+          <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+            <div className="text-label font-semibold uppercase text-subtle">Cases in the last 24 hours</div>
+            <p className="mt-0.5 font-mono text-sm text-text">{num(counts[a.count])}</p>
+          </div>
+        </div>
+        <p className="text-sm text-muted">
+          The count is read from the live plant every time this page redraws. If the two boxes are out of step, the
+          numbers on either side of this arrow will not match.
+        </p>
+      </div>,
+    )
+  }
+
+  const openLoop = (l: MapLoop) => {
+    const hours = (counts[l.count] * l.minutesEach) / 60
+    openTarget(
+      'Loop',
+      l.id,
+      l.label,
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+            <div className="text-label font-semibold uppercase text-subtle">Times today</div>
+            <p className="mt-0.5 font-mono text-sm text-danger">{num(counts[l.count])}</p>
+          </div>
+          <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+            <div className="text-label font-semibold uppercase text-subtle">Handling each time</div>
+            <p className="mt-0.5 font-mono text-sm text-text">{l.minutesEach} min</p>
+          </div>
+          <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+            <div className="text-label font-semibold uppercase text-subtle">Cost a day</div>
+            <p className="mt-0.5 font-mono text-sm text-danger">{hours.toFixed(1)} h</p>
+          </div>
+        </div>
+        <p className="text-sm text-muted">
+          A loop means the work went backwards. This one appears in no written procedure: the times are live, the
+          minutes of handling are the figure the key users gave.
+        </p>
+        <Button
+          onClick={() => {
+            drawer.closeAll()
+            navigate('/flow/checks')
+          }}
+        >
+          See the check that catches it
+        </Button>
+      </div>,
+    )
+  }
+
+  const applyFeedback = () => {
+    setApplying(true)
+    window.setTimeout(() => {
+      setApplying(false)
+      store.applyProcessFeedback()
+      toast({
+        title: 'Map redrawn as version 2',
+        description: `${open} correction${open === 1 ? '' : 's'} from key users folded in.`,
+        tone: 'success',
+      })
+    }, APPLY_LOG.length * 420 + 200)
+  }
+
+  if (!app.discoveryRun) {
+    return (
+      <>
+        <JourneyBar step={2} />
+        <PageHeader
+          title="Process Discovery"
+          subtitle="The map the factory drew of how the plant actually works, for the key users to correct."
+          tabs={TABS}
+          actions={
+            <Button variant="ai" leftIcon={<Radar size={15} />} loading={running} onClick={runDiscovery}>
+              Run discovery
+            </Button>
+          }
+        />
+        {running ? (
+          <Card tone="ai">
+            <CardHeader title="Discovery agent" subtitle="Turning clicks and log lines into a process." />
+            <CardBody>
+              <LiveLog lines={DISCOVERY_LINES} running height={200} />
+            </CardBody>
+          </Card>
+        ) : (
+          <Card>
+            <EmptyState
+              icon={<Radar size={28} />}
+              title="No map yet"
+              description="The map is drawn from the recordings, the plant log and the written procedures. Run discovery and it appears here, with every arrow counted against the live plant."
+              action={
+                <Button variant="ai" leftIcon={<Radar size={15} />} onClick={runDiscovery}>
+                  Run discovery
+                </Button>
+              }
+            />
+          </Card>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <JourneyBar step={2} />
+      <PageHeader
+        title="Process Discovery"
+        subtitle="The map the factory drew of how the plant actually works. Press anything on it to agree or correct it."
+        tabs={TABS}
+        actions={
+          <Button
+            variant="primary"
+            leftIcon={<Sparkles size={15} />}
+            onClick={() => {
+              toast({
+                title: `Opening Test Studio with process map v${map.version}`,
+                description: 'The scenarios are written from this map.',
+                tone: 'info',
+              })
+              navigate('/studio')
+            }}
+          >
+            Generate scenarios
+          </Button>
+        }
+      />
+
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Stages on the map" value={num(map.stages.length)} hint="P1 Gate to Invoice" />
+        <StatTile
+          label="Rework loops"
+          value={num(map.loops.length)}
+          tone={map.loops.length ? 'warning' : 'success'}
+          hint={`about ${loopHours.toFixed(1)} hours a day`}
+        />
+        <StatTile
+          label="Corrections from key users"
+          value={num(applied)}
+          tone={applied ? 'info' : 'neutral'}
+          hint={open ? `${open} still waiting` : 'all folded in'}
+        />
+        <StatTile
+          label="Map version"
+          value={`v${map.version}`}
+          tone={map.version === 2 ? 'success' : 'neutral'}
+          hint={map.version === 2 ? 'the scenarios are written from this one' : 'not corrected yet'}
+        />
+      </div>
+
+      <Card className="mb-4">
+        <CardHeader
+          title="The process it found"
+          subtitle="P1 Gate to Invoice as the plant actually runs it. Every arrow is counted against the last 24 hours."
+          actions={
+            <span className="flex flex-wrap items-center gap-2">
+              {map.version === 2 && <Badge tone="success">Version 2 — {applied} corrections from key users</Badge>}
+              {app.mapVersion === 2 && (
+                <Switch checked={compare} onChange={setCompare} label="Compare with version 1" size="sm" />
+              )}
+            </span>
+          }
+        />
+        <CardBody className="space-y-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-subtle">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-5 rounded-full bg-success" /> the clean path
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-5 rounded-full bg-danger" /> rework, the work going backwards
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-5 rounded-full bg-accent" /> added by a key user
+            </span>
+          </div>
+          <div className="j2w-scroll overflow-x-auto">
+            <ProcessMapSvg map={map} counts={counts} onStage={openStage} onArrow={openArrow} onLoop={openLoop} />
+          </div>
+          {compare && app.mapVersion === 2 && (
+            <div className="space-y-3 rounded-md border border-line bg-surface2/40 p-3">
+              <div className="text-label font-semibold uppercase text-subtle">Version 1, before the key users saw it</div>
+              <div className="j2w-scroll overflow-x-auto opacity-70">
+                <ProcessMapSvg map={MAP_V1} counts={counts} onStage={openStage} onArrow={openArrow} onLoop={openLoop} />
+              </div>
+              <DataTable
+                rows={MAP_CORRECTIONS}
+                rowKey={(c) => c.id}
+                columns={[
+                  { key: 'reason', header: 'Reason', width: 140, render: (c) => <Badge tone="warning">{c.reason}</Badge> },
+                  { key: 'what', header: 'What the key users said' },
+                  { key: 'before', header: 'Version 1' },
+                  { key: 'after', header: 'Version 2' },
+                ]}
+              />
+            </div>
+          )}
+        </CardBody>
+        <SourceNote
+          title="How the map is drawn"
+          reads={[
+            { label: '6 recordings', note: 'the order the clicks really happened in' },
+            { label: 'Plant event log', route: '/flow' },
+            { table: 'weighbridge_ticket', note: 'the count on each arrow' },
+            { table: 'RBKP', note: 'how often the work goes backwards' },
+          ]}
+          computes="groups the clicks into boxes, orders them by the log, counts every arrow against the live tables and folds in the key users' corrections"
+          feeds={[
+            { label: 'Process Ontology', route: '/ontology?process=P1' },
+            { label: 'Test Studio', route: '/studio' },
+          ]}
+          steps={[
+            'Each box is an activity the agent recognised from the clicks and the log.',
+            'Each arrow carries the number of cases that made that move in the last 24 hours.',
+            'A red curve means the work went backwards, and carries what that costs in a day.',
+            'Key users press a box, an arrow or a loop and say whether it is right. Their corrections make version 2.',
+          ]}
+        />
+      </Card>
+
+      {(applying || map.version === 2) && (
+        <Card className="mb-4" tone="ai">
+          <CardHeader title="Map agent" subtitle="Redrawing the map with the key users' corrections." />
+          <CardBody>
+            <LiveLog lines={APPLY_LOG} running={applying} height={160} />
+          </CardBody>
+        </Card>
+      )}
+
+      <Card className="mb-4">
+        <CardHeader
+          title="What the key users said"
+          subtitle="Every correction left on the map, and what became of it."
+          actions={
+            <Button variant="ai" leftIcon={<Check size={15} />} loading={applying} disabled={!open} onClick={applyFeedback}>
+              Apply feedback
+            </Button>
+          }
+        />
+        <DataTable
+          rows={app.processFeedback}
+          rowKey={(f) => f.id}
+          maxHeight={420}
+          rowTone={(f) => (f.status === 'Open' && f.verdict === 'Not right' ? 'warning' : undefined)}
+          columns={[
+            { key: 'id', header: 'ID', mono: true, width: 80 },
+            {
+              key: 'target',
+              header: 'What it is about',
+              render: (f) => (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Badge tone="neutral">{f.targetKind}</Badge>
+                  <span className="text-text">{f.target}</span>
+                </span>
+              ),
+            },
+            {
+              key: 'verdict',
+              header: 'Verdict',
+              width: 120,
+              render: (f) => (
+                <Badge tone={f.verdict === 'Correct' ? 'success' : f.verdict === 'Not right' ? 'danger' : 'info'}>
+                  {f.verdict}
+                </Badge>
+              ),
+            },
+            { key: 'reason', header: 'Reason', width: 140, render: (f) => f.reason ?? '—' },
+            { key: 'comment', header: 'Comment', render: (f) => <span className="text-xs text-muted">{f.comment ?? '—'}</span> },
+            { key: 'by', header: 'From', width: 150 },
+            { key: 'at', header: 'Left', width: 140 },
+            {
+              key: 'status',
+              header: 'Status',
+              width: 110,
+              render: (f) => (
+                <Badge tone={f.status === 'Applied' ? 'success' : f.status === 'Dismissed' ? 'neutral' : 'warning'}>
+                  {f.status}
+                </Badge>
+              ),
+            },
+            {
+              key: 'actions',
+              header: '',
+              sortable: false,
+              width: 110,
+              render: (f) =>
+                f.status === 'Open' ? (
+                  <Button
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      store.setFeedbackStatus(f.id, 'Dismissed')
+                      toast({ title: `${f.id} dismissed`, description: 'The map stays as it is.', tone: 'info' })
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                ) : (
+                  <span className="text-xs text-subtle">—</span>
+                ),
+            },
+          ]}
+          empty="Nothing said yet. Press a box, an arrow or a loop on the map above."
+        />
+        <SourceNote
+          title="Where the corrections go"
+          reads={[{ label: 'Key users on this page', note: 'Correct, Not right with a reason, or a comment' }]}
+          computes="folds every open correction into the map and raises the version"
+          feeds={[
+            { label: 'Test Studio', route: '/studio' },
+            { label: 'Process Ontology', route: '/ontology?process=P1' },
+          ]}
+          steps={[
+            'A key user presses anything on the map and says whether it is right.',
+            '“Not right” carries a reason: wrong order, missing step, not a real step, wrong system or other.',
+            'Apply feedback redraws the map and marks every correction as applied.',
+            'Scenarios written after that say which version of the map they came from.',
+          ]}
+        />
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader title="Where each stage came from" subtitle="Each box, traced back to the recording it was found in." />
+        <CardBody className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+          {map.stages.map((s, i) => {
+            const session = DISCOVERY_SESSIONS[Math.min(i, DISCOVERY_SESSIONS.length - 1)]
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => openStage(s)}
+                className="rounded-md border border-line bg-surface2/50 px-2.5 py-2 text-left transition-colors hover:bg-surface2"
+              >
+                <span className="block text-[11px] font-medium text-text">{s.name}</span>
+                <span className="block text-[11px] text-subtle">
+                  found in {session.id} · {12 + i * 9} log lines
+                </span>
+              </button>
+            )
+          })}
+        </CardBody>
+      </Card>
+
+      <ActivitiesCard />
+
+      <Card>
+        <CardHeader
+          title="Rework loops"
+          subtitle={`The loops that appear in no procedure. They cost roughly ${loopHours.toFixed(1)} hours a day across both plants.`}
+          icon={<RotateCcw size={16} className="text-accent" />}
+        />
+        <CardBody>
+          <ReworkDiagram loops={map.loops} counts={counts} stages={map.stages} />
+        </CardBody>
+      </Card>
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tab 3 — procedure against reality                                          */
+/* -------------------------------------------------------------------------- */
+
+export function ProcedureComparePage() {
+  const navigate = useNavigate()
+  const version = useSimVersion()
+  const app = useStore()
+  const [running, setRunning] = useState(false)
+
+  /** What the written procedure promises, against what the systems actually did. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const gaps = useMemo(() => {
+    const db = engine.db
+    const byGatePass = new Map(db.MSEG.map((m) => [m.xblnr, m]))
+    const wrongWeight = db.weighbridge_ticket.filter((t) => {
+      const m = byGatePass.get(t.gate_pass)
+      return m ? Math.abs(m.menge - t.net_kg) > 20 : false
+    }).length
+    const noPo = db.captured_invoice.filter((c) => !c.po).length
+    const parked = db.RBKP.filter((r) => r.status === 'Parked').length
+    const batchMismatch = db.receipt.filter((r) => {
+      const sum = db.scrap_batch.filter((b) => b.receipt === r.receipt).reduce((n, b) => n + b.weight_kg, 0)
+      return sum > 0 && Math.abs(sum - r.weight_kg) > 1
+    }).length
+    const noMo = db.chemistry.filter((c) => c.mo_pct === null).length
+    return [
+      {
+        doc: 'SOP-114',
+        rule: 'Deviations above 20 kg against the weighbridge are reported',
+        observed: `${wrongWeight} goods receipts differ from the weighbridge by more than 20 kg`,
+        followed: wrongWeight === 0,
+        route: '/flow/checks',
+      },
+      {
+        doc: 'SOP-121',
+        rule: 'Every supplier invoice is captured with a purchase order reference',
+        observed: `${noPo} captures carry no purchase order`,
+        followed: noPo === 0,
+        route: '/flow/data?system=esker&table=captured_invoice',
+      },
+      {
+        doc: 'SOP-121',
+        rule: 'A quantity difference above 1 % parks the invoice for review',
+        observed: `${parked} invoices parked, which is the control working`,
+        followed: true,
+        route: '/flow/data?system=sap-steel&table=RBKP',
+      },
+      {
+        doc: 'SOP-203',
+        rule: 'Batch weights must add up to the weight received',
+        observed: batchMismatch === 0 ? 'No receipt lost weight in sortation' : `${batchMismatch} receipts do not add up`,
+        followed: batchMismatch === 0,
+        route: '/flow/data?system=scrap&table=scrap_batch',
+      },
+      {
+        doc: 'SOP-240',
+        rule: 'A result is only released when Ni, Cr and Mo are all present',
+        observed: `${noMo} chemistry records arrived without molybdenum`,
+        followed: noMo === 0,
+        route: '/flow/data?system=scrap&table=chemistry',
+      },
+    ]
+  }, [version])
+
+  /** How often the process runs clean, and how often it goes backwards. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const variants = useMemo(() => {
+    const db = engine.db
+    const invoices = db.RBKP.length
+    const parked = db.RBKP.filter((r) => r.status === 'Parked').length
+    const batches = db.scrap_batch.length
+    const noMo = db.chemistry.filter((c) => c.mo_pct === null).length
+    const cases = invoices + batches
+    const rework = parked + noMo
+    return [
+      { label: 'Straight through, no rework', count: Math.max(0, cases - rework), tone: 'success' as const, route: '/flow' },
+      { label: 'Invoice parked, yard re-weighs, invoice re-posted', count: parked, tone: 'danger' as const, route: '/flow/checks' },
+      { label: 'Chemistry incomplete, batch re-sampled', count: noMo, tone: 'warning' as const, route: '/flow/checks' },
+    ].map((v) => ({ ...v, pct: cases ? Math.round((v.count / cases) * 100) : 0 }))
+  }, [version])
+
+  const gapsOpen = gaps.filter((g) => !g.followed).length
+
+  const runDiscovery = () => {
+    setRunning(true)
+    window.setTimeout(() => {
+      setRunning(false)
+      store.setDiscoveryRun()
+    }, DISCOVERY_LINES.length * 420 + 200)
+  }
+
+  if (!app.discoveryRun) {
+    return (
+      <>
+        <JourneyBar step={1} />
+        <PageHeader
+          title="Process Discovery"
+          subtitle="Five written rules, each one measured against what the systems actually did."
+          tabs={TABS}
+          actions={
+            <Button variant="ai" leftIcon={<Radar size={15} />} loading={running} onClick={runDiscovery}>
+              Run discovery
+            </Button>
+          }
+        />
+        {running ? (
+          <Card tone="ai">
+            <CardHeader title="Discovery agent" subtitle="Turning clicks and log lines into a process." />
+            <CardBody>
+              <LiveLog lines={DISCOVERY_LINES} running height={200} />
+            </CardBody>
+          </Card>
+        ) : (
+          <Card>
+            <EmptyState
+              icon={<ScrollText size={28} />}
+              title="Nothing compared yet"
+              description="The written procedures are read during discovery, then every rule in them is turned into a query and run against the live plant data. Run discovery and the verdicts appear here."
+              action={
+                <Button variant="ai" leftIcon={<Radar size={15} />} onClick={runDiscovery}>
+                  Run discovery
+                </Button>
+              }
+            />
+          </Card>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <JourneyBar step={1} />
+      <PageHeader
+        title="Process Discovery"
+        subtitle="What the written procedure promises, against what the systems actually did in the last 24 hours."
+        tabs={TABS}
+      />
+
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Rules checked" value={num(gaps.length)} hint="from 4 written procedures" />
+        <StatTile
+          label="Not followed"
+          value={num(gapsOpen)}
+          tone={gapsOpen ? 'danger' : 'success'}
+          hint="measured against live plant data"
+        />
+        <StatTile
+          label="Straight through"
+          value={`${variants[0].pct} %`}
+          tone={variants[0].pct >= 85 ? 'success' : 'warning'}
+          hint="cases with no rework"
+        />
+        <StatTile
+          label="Went backwards"
+          value={num(variants[1].count + variants[2].count)}
+          tone="warning"
+          hint="cases that needed rework"
+          onClick={() => navigate('/flow/checks')}
+        />
+      </div>
+
+      <Card className="mb-4">
+        <CardHeader
+          title="What the procedure says, against what the systems actually did"
+          subtitle="Five written rules, each one measured against the live plant data."
+          actions={
+            <Badge tone={gapsOpen ? 'danger' : 'success'}>
+              {gapsOpen} of {gaps.length} not followed
+            </Badge>
+          }
+        />
+        <DataTable
+          rows={gaps}
+          rowKey={(g, i) => `${g.doc}-${i}`}
+          onRowClick={(g) => navigate(g.route)}
+          rowTone={(g) => (g.followed ? undefined : 'danger')}
+          columns={[
+            { key: 'doc', header: 'Document', mono: true, width: 110 },
+            { key: 'rule', header: 'What the procedure says' },
+            { key: 'observed', header: 'What actually happened' },
+            {
+              key: 'followed',
+              header: 'Verdict',
+              width: 140,
+              render: (g) => (
+                <Badge tone={g.followed ? 'success' : 'danger'}>{g.followed ? 'Followed' : 'Not followed'}</Badge>
+              ),
+              value: (g) => (g.followed ? 1 : 0),
+            },
+          ]}
+          empty="No rules to compare yet."
+        />
+        <SourceNote
+          title="How the comparison is made"
+          reads={[
+            { label: '4 standard operating procedures', note: 'the written rules' },
+            { table: 'MSEG', note: 'what the systems actually recorded' },
+            { table: 'captured_invoice' },
+            { table: 'chemistry' },
+          ]}
+          computes="turns each written rule into a query and runs it against the last 24 hours of plant data"
+          feeds={[{ label: 'Live checks', route: '/flow/checks' }, { label: 'Test Studio', route: '/studio' }]}
+          steps={[
+            'A rule in a procedure is a sentence: something must always, or never, be true.',
+            'Discovery turns that sentence into a query over the tables the stage writes to.',
+            'The query runs against real data, so the verdict is evidence rather than opinion.',
+            'Rules that are broken become live checks and negative scenarios.',
+          ]}
+        />
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="How often it runs clean"
+          subtitle="Every case the plant handled in the last 24 hours, split by the path it took."
+        />
+        <CardBody className="space-y-2.5">
+          {variants.map((v) => (
+            <button
+              key={v.label}
+              type="button"
+              onClick={() => navigate(v.route)}
+              className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface2"
+            >
+              <span className="w-72 shrink-0 truncate text-xs text-text">{v.label}</span>
+              <span className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface2">
+                <span
+                  className={
+                    'block h-full rounded-full transition-[width] duration-500 ' +
+                    (v.tone === 'success' ? 'bg-success' : v.tone === 'danger' ? 'bg-danger' : 'bg-accent')
+                  }
+                  style={{ width: `${Math.max(2, v.pct)}%` }}
+                />
+              </span>
+              <span className="w-12 shrink-0 text-right font-mono text-xs text-text">{v.pct} %</span>
+              <span className="w-16 shrink-0 text-right font-mono text-[11px] text-subtle">{num(v.count)} cases</span>
+            </button>
+          ))}
+        </CardBody>
+        <SourceNote
+          reads={[{ table: 'RBKP' }, { table: 'chemistry' }, { table: 'scrap_batch' }]}
+          computes="counts how many cases went straight through against how many went backwards into rework"
+          feeds={[{ label: 'Process map', route: '/discovery/map' }]}
+        />
+      </Card>
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pieces                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** The activities the agent recognised, counted against the live tables. */
+function ActivitiesCard() {
+  const navigate = useNavigate()
+  const version = useSimVersion()
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const activities = useMemo(() => {
+    const db = engine.db
+    const parked = db.RBKP.filter((r) => r.status === 'Parked').length
+    const noMo = db.chemistry.filter((c) => c.mo_pct === null).length
+    return [
+      { activity: 'Weigh a vehicle', occurrences: db.weighbridge_ticket.length, seconds: 210, systems: 'Yard Management', evidence: 'DS-01', rework: false, route: '/flow/data?system=yard&table=weighbridge_ticket' },
+      { activity: 'Book the goods receipt', occurrences: db.MSEG.length, seconds: 4, systems: 'SAP S/4HANA – Steel', evidence: 'DS-01, log', rework: false, route: '/flow/data?system=sap-steel&table=MSEG' },
+      { activity: 'Capture the supplier invoice', occurrences: db.captured_invoice.length, seconds: 320, systems: 'Esker', evidence: 'DS-02', rework: false, route: '/flow/data?system=esker&table=captured_invoice' },
+      { activity: 'Run the three-way match', occurrences: db.RBKP.length, seconds: 6, systems: 'SAP S/4HANA – Steel', evidence: 'DS-03, log', rework: false, route: '/flow/data?system=sap-steel&table=RBKP' },
+      { activity: 'Handle a parked invoice', occurrences: parked, seconds: 1680, systems: 'SAP, Yard Management', evidence: 'DS-03', rework: true, route: '/flow/checks' },
+      { activity: 'Sort a receipt into batches', occurrences: db.scrap_batch.length, seconds: 540, systems: 'Scrap Yard Operations', evidence: 'DS-04', rework: false, route: '/flow/data?system=scrap&table=scrap_batch' },
+      { activity: 'Release a laboratory sample', occurrences: db.lab_result.length, seconds: 420, systems: 'Laboratory app', evidence: 'DS-05', rework: false, route: '/flow/data?system=lab&table=lab_result' },
+      { activity: 'Re-sample after an incomplete result', occurrences: noMo, seconds: 900, systems: 'Laboratory, Scrap Yard', evidence: 'DS-05, log', rework: true, route: '/flow/checks' },
+      { activity: 'Confirm a heat', occurrences: db.AFRU.length, seconds: 90, systems: 'Mill, SAP', evidence: 'DS-06', rework: false, route: '/flow/data?system=sap-steel&table=AFRU' },
+    ]
+  }, [version])
+
+  return (
+    <Card className="mb-4">
+      <CardHeader
+        title="Activities it recognised"
+        subtitle="Counted against the live plant data, so these numbers move while you watch. Red rows are rework."
+      />
+      <DataTable
+        rows={activities}
+        rowKey={(a) => a.activity}
+        onRowClick={(a) => navigate(a.route)}
+        rowTone={(a) => (a.rework ? 'danger' : undefined)}
+        columns={[
+          { key: 'activity', header: 'Activity' },
+          { key: 'occurrences', header: 'Times today', align: 'right', mono: true, width: 120 },
+          {
+            key: 'seconds',
+            header: 'Typical duration',
+            align: 'right',
+            mono: true,
+            width: 140,
+            render: (a) => (a.seconds >= 60 ? `${Math.round(a.seconds / 60)} min` : `${a.seconds} s`),
+            value: (a) => a.seconds,
+          },
+          { key: 'systems', header: 'Systems', width: 220 },
+          { key: 'evidence', header: 'Evidence', width: 130, mono: true },
+          {
+            key: 'rework',
+            header: 'Type',
+            width: 110,
+            render: (a) => <Badge tone={a.rework ? 'danger' : 'success'}>{a.rework ? 'Rework' : 'Normal'}</Badge>,
+            value: (a) => (a.rework ? 1 : 0),
+          },
+        ]}
+        empty="No activities recognised yet."
+      />
+      <SourceNote
+        reads={[{ table: 'weighbridge_ticket' }, { table: 'RBKP' }, { table: 'chemistry' }]}
+        computes="each discovered activity is counted against the live table it writes to"
+        feeds={[{ label: 'Scenario generation', route: '/studio' }]}
+        steps={[
+          'Discovery names an activity from the clicks and the log.',
+          'Each activity is matched to the table it creates rows in.',
+          'The count is read live, so the page shows today’s real volume rather than a stored figure.',
+          'Rework activities are the ones that only happen when something earlier went wrong.',
+        ]}
+      />
+    </Card>
+  )
+}
+
+/** Correct · Not right · Add a comment, on whatever the key user pressed. */
+function FeedbackPanel({
+  targetKind,
+  targetId,
+  target,
+  existing,
+  onDone,
+}: {
+  targetKind: ProcessFeedback['targetKind']
+  targetId: string
+  target: string
+  existing: ProcessFeedback[]
+  onDone: () => void
+}) {
+  const toast = useToast()
+  const [mode, setMode] = useState<'none' | 'wrong' | 'comment'>('none')
+  const [reason, setReason] = useState<FeedbackReason>('Wrong order')
+  const [comment, setComment] = useState('')
+
+  const leave = (verdict: FeedbackVerdict, extra?: { reason?: FeedbackReason; comment?: string }) => {
+    const id = store.addProcessFeedback({
+      targetKind,
+      targetId,
+      target,
+      verdict,
+      reason: extra?.reason,
+      comment: extra?.comment,
+      by: 'Key User',
+      at: new Date().toLocaleString('en-GB'),
+      status: verdict === 'Correct' ? 'Applied' : 'Open',
+    })
+    toast({
+      title: `${id} left on ${target}`,
+      description:
+        verdict === 'Correct'
+          ? 'Marked as correct. Nothing on the map changes.'
+          : 'It is waiting in the feedback list. Press Apply feedback to redraw the map.',
+      tone: verdict === 'Correct' ? 'success' : 'warning',
+    })
+    onDone()
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-line bg-surface2/40 p-3">
+      <div className="text-label font-semibold uppercase text-subtle">Is this right?</div>
+
+      {existing.length > 0 && (
+        <div className="space-y-1.5">
+          {existing.map((f) => (
+            <div key={f.id} className="flex flex-wrap items-center gap-2 rounded-md border border-line px-2.5 py-1.5 text-xs">
+              <span className="font-mono text-subtle">{f.id}</span>
+              <Badge tone={f.verdict === 'Correct' ? 'success' : f.verdict === 'Not right' ? 'danger' : 'info'}>
+                {f.verdict}
+              </Badge>
+              <span className="min-w-0 flex-1 text-muted">{f.comment ?? f.reason ?? '—'}</span>
+              <Badge tone={f.status === 'Applied' ? 'success' : f.status === 'Dismissed' ? 'neutral' : 'warning'}>
+                {f.status}
+              </Badge>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="primary" leftIcon={<Check size={14} />} onClick={() => leave('Correct')}>
+          Correct
+        </Button>
+        <Button size="sm" variant="danger" leftIcon={<X size={14} />} onClick={() => setMode(mode === 'wrong' ? 'none' : 'wrong')}>
+          Not right
+        </Button>
+        <Button size="sm" leftIcon={<MessageSquare size={14} />} onClick={() => setMode(mode === 'comment' ? 'none' : 'comment')}>
+          Add a comment
+        </Button>
+      </div>
+
+      {mode === 'wrong' && (
+        <div className="space-y-2">
+          <label className="block text-label font-semibold uppercase text-subtle">What is wrong with it?</label>
+          <Select value={reason} onChange={(e) => setReason(e.target.value as FeedbackReason)}>
+            {FEEDBACK_REASONS.map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </Select>
+          <Textarea
+            rows={3}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Say what really happens, in your own words."
+          />
+          <Button size="sm" variant="danger" fullWidth onClick={() => leave('Not right', { reason, comment: comment.trim() || undefined })}>
+            Leave the correction
+          </Button>
+        </div>
+      )}
+
+      {mode === 'comment' && (
+        <div className="space-y-2">
+          <Textarea
+            rows={3}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Anything the factory should know about this step."
+          />
+          <Button
+            size="sm"
+            fullWidth
+            disabled={!comment.trim()}
+            onClick={() => leave('Comment', { comment: comment.trim() })}
+          >
+            Leave the comment
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Keeps a label inside its box. */
+function short(text: string) {
+  return text.length > 18 ? `${text.slice(0, 17)}…` : text
+}
+
+/** Boxes left to right, arrows counted live, rework curving back underneath. */
+function ProcessMapSvg({
+  map,
+  counts,
+  onStage,
+  onArrow,
+  onLoop,
+}: {
+  map: ProcessMapVersion
+  counts: Record<CountKey, number>
+  onStage: (s: MapStage) => void
+  onArrow: (a: MapArrow) => void
+  onLoop: (l: MapLoop) => void
+}) {
+  const t = useThemeTokens()
+  const BOX_W = 168
+  const BOX_H = 92
+  const GAP = 72
+  const TOP = 44
+  const n = map.stages.length
+  const width = 24 + n * BOX_W + (n - 1) * GAP + 24
+  const loopTop = TOP + BOX_H + 54
+  const height = loopTop + map.loops.length * 76 + 16
+  const x = (i: number) => 24 + i * (BOX_W + GAP)
+  const index = (id: string) => map.stages.findIndex((s) => s.id === id)
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} style={{ minWidth: width }}>
+      <defs>
+        <marker id="pm-head" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M 0 0 L 7 3.5 L 0 7 z" fill={t.success} />
+        </marker>
+      </defs>
+
+      {map.arrows.map((a) => {
+        const i = index(a.from)
+        const j = index(a.to)
+        if (i < 0 || j < 0) return null
+        const x1 = x(i) + BOX_W
+        const x2 = x(j)
+        const mid = (x1 + x2) / 2
+        const y = TOP + BOX_H / 2
+        return (
+          <g key={a.id} className="cursor-pointer" onClick={() => onArrow(a)}>
+            <text x={mid} y={26} fontSize={10.5} textAnchor="middle" fill={t.muted}>
+              {a.label}
+            </text>
+            <line x1={x1 + 4} y1={y} x2={x2 - 9} y2={y} stroke={t.success} strokeWidth={1.8} markerEnd="url(#pm-head)" />
+            <text x={mid} y={TOP + BOX_H + 18} fontSize={10.5} textAnchor="middle" fontFamily="JetBrains Mono, monospace" fill={t.subtle}>
+              {num(counts[a.count])} cases
+            </text>
+            <rect x={x1} y={TOP} width={Math.max(10, x2 - x1)} height={BOX_H + 24} fill="transparent" />
+          </g>
+        )
+      })}
+
+      {map.stages.map((s, i) => {
+        const clean = map.clean.includes(s.id)
+        return (
+          <g key={s.id} className="cursor-pointer" onClick={() => onStage(s)}>
+            <rect
+              x={x(i)}
+              y={TOP}
+              width={BOX_W}
+              height={BOX_H}
+              rx={11}
+              fill={s.added ? t['accent-soft'] : t.surface}
+              stroke={s.added ? t.accent : clean ? t.success : t['line-strong']}
+              strokeWidth={clean || s.added ? 1.8 : 1.2}
+            />
+            <text x={x(i) + 14} y={TOP + 24} fontSize={11.5} fontWeight={600} fill={t.text}>
+              {s.name.length > 22 ? `${s.name.slice(0, 21)}…` : s.name}
+            </text>
+            <text x={x(i) + 14} y={TOP + 41} fontSize={10} fill={t.subtle}>
+              {s.system.length > 24 ? `${s.system.slice(0, 23)}…` : s.system}
+            </text>
+            <text x={x(i) + 14} y={TOP + 62} fontSize={9.5} fill={t.muted}>
+              {s.note.length > 30 ? `${s.note.slice(0, 29)}…` : s.note}
+            </text>
+            <text x={x(i) + 14} y={TOP + 78} fontSize={9} fill={t.subtle}>
+              press to agree or correct
+            </text>
+          </g>
+        )
+      })}
+
+      {map.loops.map((l, k) => {
+        const i = index(l.from)
+        const j = index(l.to)
+        if (i < 0 || j < 0) return null
+        const xa = x(i) + BOX_W / 2
+        const xb = x(j) + BOX_W / 2
+        const yb = loopTop + k * 76
+        const hours = (counts[l.count] * l.minutesEach) / 60
+        return (
+          <g key={l.id} className="cursor-pointer" onClick={() => onLoop(l)}>
+            <path
+              d={`M ${xa} ${TOP + BOX_H} C ${xa} ${yb + 40}, ${xb} ${yb + 40}, ${xb} ${TOP + BOX_H}`}
+              fill="none"
+              stroke={t.danger}
+              strokeWidth={1.8}
+              strokeDasharray="6 5"
+            />
+            <rect x={Math.min(xa, xb) + 20} y={yb + 14} width={Math.max(220, Math.abs(xb - xa) - 40)} height={30} rx={15} fill={t.surface} stroke={t.danger} />
+            <text x={Math.min(xa, xb) + 36} y={yb + 33} fontSize={10.5} fill={t.muted}>
+              {l.label}
+            </text>
+            <text
+              x={Math.min(xa, xb) + 20 + Math.max(220, Math.abs(xb - xa) - 40) - 16}
+              y={yb + 33}
+              fontSize={10.5}
+              textAnchor="end"
+              fontFamily="JetBrains Mono, monospace"
+              fill={t.danger}
+            >
+              {num(counts[l.count])} today · {hours.toFixed(1)} h a day
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function ReworkDiagram({
+  loops,
+  counts,
+  stages,
+}: {
+  loops: MapLoop[]
+  counts: Record<CountKey, number>
+  stages: MapStage[]
+}) {
+  const t = useThemeTokens()
+  const name = (id: string) => stages.find((s) => s.id === id)?.name ?? id
+  return (
+    <svg viewBox={`0 0 900 ${40 + loops.length * 90}`} width="100%" height={40 + loops.length * 90} className="min-w-[640px]">
+      {loops.map((l, i) => {
+        const y = 60 + i * 90
+        const hours = (counts[l.count] * l.minutesEach) / 60
+        return (
+          <g key={l.id}>
+            <path
+              d={`M 760 ${y} C 600 ${y + 58}, 260 ${y + 58}, 120 ${y}`}
+              fill="none"
+              stroke={i === 0 ? t.danger : t.accent}
+              strokeWidth={1.8}
+              strokeDasharray="6 5"
+            />
+            <rect x={280} y={y + 22} width={320} height={28} rx={14} fill={t.surface} stroke={t.line} />
+            <text x={296} y={y + 40} fontSize={11} fill={t.muted}>
+              {l.label}
+            </text>
+            <text x={612} y={y + 40} fontSize={11} fontFamily="JetBrains Mono, monospace" fill={i === 0 ? t.danger : t.accent}>
+              {num(counts[l.count])} today · {hours.toFixed(1)} h
+            </text>
+            <rect x={50} y={y - 16} width={150} height={32} rx={8} fill={t['surface-2']} stroke={t.line} />
+            <text x={64} y={y + 4} fontSize={11} fill={t.text}>
+              back to {short(name(l.to))}
+            </text>
+            <rect x={700} y={y - 16} width={150} height={32} rx={8} fill={t['surface-2']} stroke={t.line} />
+            <text x={714} y={y + 4} fontSize={11} fill={t.text}>
+              from {short(name(l.from))}
+            </text>
+          </g>
+        )
+      })}
       <text x={20} y={16} fontSize={10.5} fill={t.subtle}>
         A loop means the work went backwards. Neither of these appears in any written procedure.
       </text>
