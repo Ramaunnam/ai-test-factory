@@ -74,6 +74,8 @@ export function ReleasePage() {
   const signedPack = store.evidencePacks.find((p) => p.runId === lastRun.id)
   const backlogClear = !store.findings.some((f) => f.id === 'F-008' && f.status !== 'Closed')
 
+  const financeChecks = checks.filter((c) => c.id === 'C10' || c.id === 'C11')
+
   const criteria: Criterion[] = [
     {
       id: 'EC-1',
@@ -84,7 +86,7 @@ export function ReleasePage() {
     },
     {
       id: 'EC-2',
-      title: 'All nine live checks agree',
+      title: `All ${checks.length} live checks agree`,
       detail: `${checks.filter((c) => c.status === 'pass').length} of ${checks.length} pass against live plant data.`,
       met: checks.every((c) => c.status === 'pass'),
       route: '/flow/checks',
@@ -109,6 +111,15 @@ export function ReleasePage() {
       detail: backlogClear ? 'The 5x profile drains cleanly.' : 'At 5x, invoice capture runs over capacity and two invoices are still in flight at the cut-off.',
       met: backlogClear,
       route: '/load',
+    },
+    {
+      id: 'EC-6',
+      title: 'Every payment was screened and priced correctly',
+      detail: financeChecks.every((c) => c.status === 'pass')
+        ? 'Every vendor was screened against the list of the day, and every foreign-currency invoice used that day’s rate.'
+        : `${financeChecks.filter((c) => c.status !== 'pass').map((c) => c.id).join(' and ')} disagree with the live finance data.`,
+      met: financeChecks.every((c) => c.status === 'pass'),
+      route: '/flow/checks',
     },
   ]
 
@@ -200,7 +211,7 @@ export function ReleasePage() {
               { label: 'Evidence packs', route: '/evidence' },
               { label: 'Month-end load result', route: '/load' },
             ]}
-            computes="five criteria evaluated live; the gate is GO only when all five are met"
+            computes="every exit criterion is evaluated live; the gate is GO only when all of them are met"
             feeds={[{ label: 'Release report', route: '/release-report/R-2026.10' }]}
             steps={[
               'Each criterion is a question with a yes or no answer, computed from live data rather than typed in.',
@@ -553,7 +564,7 @@ export function LoadPage() {
     <>
       <PageHeader
         title="Month-End Load"
-        subtitle="Push the month-end volume through the fourteen interfaces and find out which one bends first."
+        subtitle="Push the month-end volume through every interface and find out which one bends first."
         tabs={TABS}
         actions={
           <>
@@ -810,7 +821,7 @@ export function LoadPage() {
             <SourceNote
               title="How the load model works"
               reads={[
-                { label: 'Fourteen interfaces', route: '/landscape' },
+                { label: 'Eighteen interfaces', route: '/landscape' },
                 { label: 'Observed message rates', route: '/interfaces' },
               ]}
               computes="Modelled from interface capacity: each interface has a measured rate and a capacity, and the scenario multiplies the rate"

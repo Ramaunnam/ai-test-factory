@@ -66,7 +66,7 @@ const WINDOWS = [
 ]
 
 /** The handoffs that carry money rather than material. */
-const FINANCIAL = new Set(['IF-06', 'IF-09', 'IF-11', 'IF-13'])
+const FINANCIAL = new Set(['IF-06', 'IF-09', 'IF-11', 'IF-13', 'IF-15', 'IF-16', 'IF-17', 'IF-18'])
 
 function typeOf(id: string) {
   return FINANCIAL.has(id) ? 'Financial' : 'Shop-floor'
@@ -435,8 +435,8 @@ export function InterfacesPage() {
       {!detail ? (
         <Card>
           <CardHeader
-            title={activeChips.length ? 'The interfaces that match' : 'All fourteen interfaces'}
-            subtitle="Nine carry live traffic; the other five are part of the landscape but quiet in this demo."
+            title={activeChips.length ? 'The interfaces that match' : 'All eighteen interfaces'}
+            subtitle="Thirteen carry live traffic; the other five are part of the landscape but quiet in this demo."
           />
           {filtered.length === 0 ? (
             <EmptyState
@@ -511,7 +511,7 @@ export function InterfacesPage() {
               description={
                 statuses.length
                   ? 'The status chips above are hiding every record this interface carried in the chosen time window.'
-                  : 'Nine of the fourteen interfaces carry live messages. This one is here for completeness of the landscape.'
+                  : 'Thirteen of the eighteen interfaces carry live messages. This one is here for completeness of the landscape.'
               }
               action={
                 <span className="flex flex-wrap gap-2">

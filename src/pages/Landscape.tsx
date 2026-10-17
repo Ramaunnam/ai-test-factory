@@ -178,7 +178,7 @@ export function LandscapePage() {
     <>
       <PageHeader
         title="Enterprise Map"
-        subtitle="Ten systems and fourteen interfaces. Nine of the interfaces carry live traffic in this demo."
+        subtitle="Ten systems, four outside finance services and eighteen interfaces. Thirteen of the interfaces carry live traffic in this demo."
         actions={
           <SegmentedControl
             value={view}
@@ -195,7 +195,7 @@ export function LandscapePage() {
       {view === 'map' ? (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatTile label="Systems" value={num(SYSTEMS.length)} hint="three bands" />
+            <StatTile label="Systems and services" value={num(SYSTEMS.length)} hint="three bands" />
             <StatTile label="Interfaces" value={num(INTERFACES.length)} hint={`${INTERFACES.filter((i) => i.live).length} carry live traffic`} />
             <StatTile label="Records held" value={num(Object.values(counts).reduce((a, b) => a + b, 0))} hint="last 24 simulated hours" onClick={() => navigate('/flow/data')} />
             <StatTile
@@ -216,15 +216,15 @@ export function LandscapePage() {
               reads={[
                 { label: '10 systems', route: '/systems', note: 'their band, owner and connection' },
                 { label: '14 interfaces', route: '/interfaces', note: 'who sends what to whom' },
-                { table: 'MSEG', note: 'one of the nine live tables counted on each card' },
+                { table: 'MSEG', note: 'one of the live tables counted on each card' },
               ]}
               computes="counts the rows each system holds and the records the live checks disagree with"
               feeds={[{ label: 'Live Data Flow', route: '/flow' }, { label: 'Impact Simulator', route: '/simulator' }]}
               steps={[
-                'The landscape itself is fixed reference data: ten systems and fourteen interfaces.',
+                'The landscape itself is fixed reference data: ten systems, four outside services and eighteen interfaces.',
                 'The record counts come from the live simulation, table by table.',
                 'A red border means a live check currently disagrees about rows in that system.',
-                'Nine of the fourteen interfaces carry live traffic; the rest are drawn dashed.',
+                'Thirteen of the eighteen interfaces carry live traffic; the rest are drawn dashed.',
               ]}
             />
           </Card>

@@ -239,7 +239,7 @@ export function HealthPage() {
           reads={[
             { table: 'gate_pass', note: 'every vehicle that passed a gate' },
             { table: 'MSEG', note: 'goods receipts booked in SAP' },
-            { label: 'engine.messages', note: 'every message on the nine live interfaces' },
+            { label: 'engine.messages', note: 'every message on the live interfaces' },
           ]}
           computes="counts rows created in the last 60 simulated minutes"
           feeds={[{ label: 'Confidence score', route: '/' }, { label: 'Live Data Flow', route: '/flow' }]}
@@ -450,7 +450,7 @@ export function HealthPage() {
         <Card>
           <CardHeader
             title="Busiest interfaces in the last hour"
-            subtitle="Message volume on the nine live interfaces in the last hour."
+            subtitle="Message volume on the live interfaces in the last hour."
             actions={<Badge tone="neutral">{num(traffic.reduce((s, i) => s + i.count, 0))} messages</Badge>}
           />
           <CardBody className="space-y-1.5">

@@ -212,7 +212,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
     name: 'Check data across systems',
     goesIn: 'The records each system created.',
     aiDoes: 'Follows one truck through every system and compares the data at each hand-over.',
-    comesOut: 'Matched and mismatched records, with the reason. Also checks tonnes received against kilograms in stock.',
+    comesOut: 'Matched and mismatched records, with the reason. Also checks tonnes received against kilograms in stock. Finance links too: VAT, sanctions, eBanking, exchange rates.',
     checkedBy: 'Key User',
     requirements: [
       {

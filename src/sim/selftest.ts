@@ -1,7 +1,7 @@
 /**
  * Proves the engine invariant outside the browser:
  *   all faults on  → most checks fail with a sensible cause
- *   all faults off → all nine checks pass
+ *   all faults off → every check passes
  *
  * Run with:  npm run selftest
  */
@@ -43,7 +43,7 @@ if (clean.passing !== clean.total) {
   console.error(`\nFAILED: expected all ${clean.total} checks to pass with the faults off.`)
   process.exit(1)
 }
-if (withFaults.passing > 4) {
+if (withFaults.passing > 6) {
   console.error('\nFAILED: expected most checks to fail with every fault on.')
   process.exit(1)
 }

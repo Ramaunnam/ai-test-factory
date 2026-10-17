@@ -337,7 +337,7 @@ export function LiveFlowPage() {
       </div>
 
       <Card>
-        <CardHeader title="Last messages" subtitle="The most recent traffic on the nine live interfaces." />
+        <CardHeader title="Last messages" subtitle="The most recent traffic on the live interfaces." />
         <DataTable
           rows={[...eng.messages].reverse().slice(0, 60)}
           rowKey={(m) => m.id}

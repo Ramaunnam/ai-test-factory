@@ -11,7 +11,7 @@ export interface CheckDef {
   id: string
   title: string
   sentence: string
-  process: 'P1' | 'P2' | 'P4'
+  process: 'P1' | 'P2' | 'P3' | 'P4'
   stage: string
   interfaceId: string
   systems: SystemId[]
@@ -27,6 +27,9 @@ export interface CheckResult extends CheckDef {
 }
 
 const fmt = (n: number) => n.toLocaleString('en-GB').replace(/,/g, ' ')
+
+/** The simulated day a timestamp falls in. The clock starts 06:00 on 14 Oct 2026. */
+const simDayOf = (minutes: number) => Math.floor(minutes / 1440)
 
 export const CHECK_DEFS: CheckDef[] = [
   {
@@ -184,7 +187,47 @@ from   mill.heat h
 left   join sap.afru a on a.heat = h.heat
 where  a.rueck is null or a.delay_min > 15`,
   },
+  {
+    id: 'C10',
+    title: 'Every vendor paid was screened against today’s sanctions list',
+    sentence: 'No supplier invoice may be booked unless the vendor was screened against the list published that day.',
+    process: 'P3',
+    stage: 'Invoice posting',
+    interfaceId: 'IF-16',
+    systems: ['SAP Steel', 'Sanctions Service'],
+    columns: ['Invoice', 'Vendor', 'List used', 'Screened', 'Problem'],
+    faults: ['F9'],
+    sql: `select r.belnr, s.vendor, s.list_date, s.screened
+from   sap.rbkp r
+left   join sanctions.sanctions_screen s on s.belnr = r.belnr
+where  r.status = 'Posted'
+and    (s.screen is null or s.list_day <> day(s.screened))`,
+  },
+  {
+    id: 'C11',
+    title: 'Every foreign-currency invoice used that day’s exchange rate',
+    sentence: 'An invoice in a currency other than euro must be booked at the rate loaded for the day it was booked.',
+    process: 'P3',
+    stage: 'Invoice posting',
+    interfaceId: 'IF-18',
+    systems: ['FX Service', 'SAP Steel'],
+    columns: ['Invoice', 'Currency', 'Rate used', 'Rate of the day', 'Booked'],
+    faults: ['F10'],
+    sql: `select r.belnr, r.currency, r.fx_rate_used, f.rate
+from   sap.rbkp r
+left   join fx.fx_rate f on f.pair = concat(r.currency, '/EUR') and f.day = day(r.posted)
+where  r.currency <> 'EUR'
+and    (f.rate is null or r.fx_rate_used <> f.rate)`,
+  },
 ]
+
+/** "14:22" for a check row, without pulling the UI formatters into the engine. */
+function fmtClock(minutes: number) {
+  const d = new Date(new Date(2026, 9, 14, 6, 0, 0).getTime() + minutes * 60_000)
+  const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${d.getDate()} ${months[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 /** Records younger than the settle time are still legitimately in flight. */
 function settled<T>(rows: T[], at: (row: T) => number, settle: number): T[] {
@@ -434,6 +477,59 @@ export function runCheck(id: string): CheckResult {
           why: !a
             ? 'No confirmation has arrived in SAP at all.'
             : `The confirmation took ${a.delay_min} minutes, over the 15 minute limit.`,
+        })
+      })
+      break
+    }
+
+    case 'C10': {
+      const screens = new Map(db.sanctions_screen.map((x) => [x.belnr, x]))
+      settled(
+        db.RBKP.filter((r) => r.status === 'Posted'),
+        (r) => r.posted,
+        15,
+      ).forEach((r) => {
+        compared += 1
+        const screen = screens.get(r.belnr)
+        if (screen && screen.list_day === simDayOf(screen.screened)) return
+        rows.push({
+          key: r.gate_pass,
+          cells: [
+            r.belnr,
+            screen?.vendor ?? null,
+            screen?.list_date ?? null,
+            screen ? fmtClock(screen.screened) : null,
+            screen ? 'List out of date' : 'Never screened',
+          ],
+          why: screen
+            ? `The vendor was screened against the list published ${screen.list_date}, not the list of the day the invoice was booked.`
+            : 'The invoice was booked without any sanctions screening at all.',
+        })
+      })
+      break
+    }
+
+    case 'C11': {
+      settled(
+        db.RBKP.filter((r) => r.currency !== 'EUR'),
+        (r) => r.posted,
+        20,
+      ).forEach((r) => {
+        compared += 1
+        const pair = `${r.currency}/EUR`
+        const day = simDayOf(r.posted)
+        const forDay = db.fx_rate.filter((f) => f.pair === pair && f.day === day)
+        const before = forDay.find((f) => f.loaded <= r.posted)
+        // An invoice booked before the file of the day arrives legitimately uses
+        // the rate of the day before, so only a day with no file at all is wrong.
+        if (!before && forDay.length) return
+        if (before && r.fx_rate_used === before.rate) return
+        rows.push({
+          key: r.gate_pass,
+          cells: [r.belnr, r.currency, r.fx_rate_used, before?.rate ?? null, fmtClock(r.posted)],
+          why: before
+            ? `The invoice was booked at ${r.fx_rate_used}, but the rate loaded for that day was ${before.rate}.`
+            : `No exchange rate was loaded for ${pair} on that day, so the invoice used the rate of the day before.`,
         })
       })
       break

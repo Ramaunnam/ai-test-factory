@@ -237,10 +237,70 @@ export function trace(raw: string): TraceResult {
           { label: 'External invoice', value: r.ext_invoice },
           { label: 'Quantity', value: `${fmt(r.qty_kg)} kg` },
           { label: 'Amount', value: `€ ${fmt(Math.round(r.amount_eur))}` },
+          { label: 'Currency', value: r.currency },
           { label: 'Status', value: r.status, flagged: parked },
           { label: 'Reason', value: r.reason || '—', flagged: parked },
         ],
       })
+      const vat = db.vat_check.find((v) => v.belnr === r.belnr)
+      if (vat) {
+        records.push({
+          system: 'VAT Service',
+          table: 'vat_check',
+          title: `VAT check ${vat.check}`,
+          at: vat.checked,
+          flagged: !vat.valid,
+          fields: [
+            { label: 'Vendor', value: vat.vendor },
+            { label: 'VAT number', value: vat.vat_number },
+            { label: 'Valid', value: vat.valid ? 'yes' : 'no', flagged: !vat.valid },
+          ],
+        })
+      }
+
+      const screen = db.sanctions_screen.find((x) => x.belnr === r.belnr)
+      if (screen) {
+        const staleList = screen.list_day !== Math.floor(screen.screened / 1440)
+        if (staleList) problems.push('the vendor was screened against an out-of-date sanctions list')
+        records.push({
+          system: 'Sanctions Service',
+          table: 'sanctions_screen',
+          title: `Sanctions screening ${screen.screen}`,
+          at: screen.screened,
+          flagged: staleList,
+          fields: [
+            { label: 'Vendor', value: screen.vendor },
+            {
+              label: 'List used',
+              value: screen.list_date,
+              flagged: staleList,
+              note: staleList ? 'the list of the day before, not the list of the day' : undefined,
+            },
+            { label: 'On the list', value: screen.hit ? 'yes' : 'no', flagged: screen.hit },
+          ],
+        })
+      }
+
+      if (r.currency !== 'EUR') {
+        const pair = `${r.currency}/EUR`
+        const day = Math.floor(r.posted / 1440)
+        const rateRow = db.fx_rate.find((f) => f.pair === pair && f.day === day && f.loaded <= r.posted)
+        const wrongRate = !rateRow && !db.fx_rate.some((f) => f.pair === pair && f.day === day)
+        if (wrongRate) problems.push(`no exchange rate was loaded for ${pair} that day`)
+        records.push({
+          system: 'FX Service',
+          table: 'fx_rate',
+          title: `Exchange rate ${pair}`,
+          at: rateRow ? rateRow.loaded : r.posted,
+          flagged: wrongRate,
+          fields: [
+            { label: 'Currency', value: r.currency },
+            { label: 'Rate used', value: r.fx_rate_used ?? 'none', flagged: wrongRate },
+            { label: 'Rate of the day', value: rateRow ? rateRow.rate : 'not loaded', flagged: wrongRate },
+          ],
+        })
+      }
+
       const doc = db.output_document.find((d) => d.ref === r.belnr)
       if (doc) {
         records.push({
@@ -267,9 +327,27 @@ export function trace(raw: string): TraceResult {
           fields: [
             { label: 'Payment', value: pay.pay },
             { label: 'Invoice', value: pay.belnr },
+            { label: 'Vendor', value: pay.vendor },
             { label: 'Amount', value: `€ ${fmt(Math.round(pay.amount_eur))}` },
           ],
         })
+
+        const ack = [...db.bank_ack].reverse().find((a) => a.acked >= pay.run_at)
+        if (ack) {
+          records.push({
+            system: 'eBanking',
+            table: 'bank_ack',
+            title: `Bank acknowledgement ${ack.ack}`,
+            at: ack.acked,
+            flagged: false,
+            fields: [
+              { label: 'Payment run', value: ack.pay_run },
+              { label: 'Invoices', value: ack.invoices },
+              { label: 'Amount', value: `€ ${fmt(Math.round(ack.amount_eur))}` },
+              { label: 'Status', value: ack.status },
+            ],
+          })
+        }
       }
     })
 

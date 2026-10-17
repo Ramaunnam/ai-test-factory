@@ -8,8 +8,12 @@ export type SystemId =
   | 'D365'
   | 'Mill'
   | 'Reval'
+  | 'VAT Service'
+  | 'Sanctions Service'
+  | 'eBanking'
+  | 'FX Service'
 
-export type FaultId = 'F1' | 'F2' | 'F3' | 'F4' | 'F5' | 'F6' | 'F7' | 'F8'
+export type FaultId = 'F1' | 'F2' | 'F3' | 'F4' | 'F5' | 'F6' | 'F7' | 'F8' | 'F9' | 'F10'
 
 export type MessageStatus = 'in flight' | 'delivered' | 'lost' | 'duplicate'
 
@@ -87,6 +91,10 @@ export interface Rbkp {
   amount_eur: number
   status: 'Posted' | 'Parked'
   reason: string
+  /** Most suppliers invoice in euro; a few do not. */
+  currency: string
+  /** The rate the booking actually used, or null for a euro invoice. */
+  fx_rate_used: number | null
   posted: number
 }
 
@@ -178,8 +186,50 @@ export interface Issue {
 export interface Payment {
   pay: string
   belnr: string
+  vendor: string
   amount_eur: number
   run_at: number
+}
+
+/** SAP asks the VAT validation service before it books a supplier invoice. */
+export interface VatCheck {
+  check: string
+  belnr: string
+  vendor: string
+  vat_number: string
+  valid: boolean
+  checked: number
+}
+
+/** And screens the vendor against the sanctions list of the day. */
+export interface SanctionsScreen {
+  screen: string
+  belnr: string
+  vendor: string
+  /** The day the list it used was published, as a sim day index. */
+  list_day: number
+  list_date: string
+  hit: boolean
+  screened: number
+}
+
+/** The acknowledgement the bank sends back for each payment run. */
+export interface BankAck {
+  ack: string
+  pay_run: string
+  invoices: number
+  amount_eur: number
+  status: string
+  acked: number
+}
+
+/** One rate per currency pair per day, loaded at 06:00. */
+export interface FxRate {
+  day: number
+  date: string
+  pair: string
+  rate: number
+  loaded: number
 }
 
 export interface Db {
@@ -199,6 +249,10 @@ export interface Db {
   issue: Issue[]
   heat: Heat[]
   payment: Payment[]
+  vat_check: VatCheck[]
+  sanctions_screen: SanctionsScreen[]
+  bank_ack: BankAck[]
+  fx_rate: FxRate[]
 }
 
 export type TableName = keyof Db
@@ -213,6 +267,10 @@ export const SYSTEM_TABLES: Record<SystemId, TableName[]> = {
   D365: ['stock_posting', 'issue'],
   Mill: ['heat'],
   Reval: ['payment'],
+  'VAT Service': ['vat_check'],
+  'Sanctions Service': ['sanctions_screen'],
+  eBanking: ['bank_ack'],
+  'FX Service': ['fx_rate'],
 }
 
 export const SYSTEM_ORDER: SystemId[] = [
@@ -225,4 +283,8 @@ export const SYSTEM_ORDER: SystemId[] = [
   'Esker',
   'Lasernet',
   'Reval',
+  'VAT Service',
+  'Sanctions Service',
+  'eBanking',
+  'FX Service',
 ]

@@ -17,8 +17,14 @@ export interface FlowMapProps {
   height?: number
 }
 
+const SMALL_H = 34
+
+function cardHeight(s: SystemMeta) {
+  return s.small ? SMALL_H : CARD_H
+}
+
 function centre(s: SystemMeta) {
-  return { x: s.x + CARD_W / 2, y: s.y + CARD_H / 2 }
+  return { x: s.x + CARD_W / 2, y: s.y + cardHeight(s) / 2 }
 }
 
 function control(ax: number, ay: number, bx: number, by: number) {
@@ -151,21 +157,42 @@ export function FlowMap({
               x={s.x}
               y={s.y}
               width={CARD_W}
-              height={CARD_H}
-              rx={11}
-              fill={t.surface}
+              height={cardHeight(s)}
+              rx={s.small ? 17 : 11}
+              fill={s.small ? t['surface-2'] : t.surface}
               stroke={bad ? t.danger : t['line-strong']}
               strokeWidth={bad ? 2 : 1}
+              strokeDasharray={s.small ? '4 4' : undefined}
             />
-            <text x={s.x + 12} y={s.y + 23} fontSize={12.5} fontWeight={600} fill={t.text}>
-              {s.short}
-            </text>
-            <text x={s.x + 12} y={s.y + 41} fontSize={10.5} fill={t.subtle} fontFamily="JetBrains Mono, monospace">
-              {(counts[s.id] ?? 0).toLocaleString('en-GB')} records
-            </text>
-            <text x={s.x + 12} y={s.y + 59} fontSize={10.5} fill={bad ? t.danger : t.success} fontWeight={bad ? 600 : 400}>
-              {bad ? `${bad} failing records` : 'data agrees'}
-            </text>
+            {s.small ? (
+              <>
+                <text x={s.x + 14} y={s.y + 21} fontSize={11.5} fontWeight={600} fill={t.text}>
+                  {s.short}
+                </text>
+                <text
+                  x={s.x + CARD_W - 14}
+                  y={s.y + 21}
+                  fontSize={10}
+                  textAnchor="end"
+                  fill={bad ? t.danger : t.subtle}
+                  fontFamily="JetBrains Mono, monospace"
+                >
+                  {(counts[s.id] ?? 0).toLocaleString('en-GB')}
+                </text>
+              </>
+            ) : (
+              <>
+                <text x={s.x + 12} y={s.y + 23} fontSize={12.5} fontWeight={600} fill={t.text}>
+                  {s.short}
+                </text>
+                <text x={s.x + 12} y={s.y + 41} fontSize={10.5} fill={t.subtle} fontFamily="JetBrains Mono, monospace">
+                  {(counts[s.id] ?? 0).toLocaleString('en-GB')} records
+                </text>
+                <text x={s.x + 12} y={s.y + 59} fontSize={10.5} fill={bad ? t.danger : t.success} fontWeight={bad ? 600 : 400}>
+                  {bad ? `${bad} failing records` : 'data agrees'}
+                </text>
+              </>
+            )}
           </g>
         )
       })}
@@ -203,6 +230,9 @@ export function MapLegend({ className }: { className?: string }) {
       </span>
       <span className="inline-flex items-center gap-1.5">
         <span className="h-0 w-5 border-t border-dashed border-line-strong" /> interface without live traffic
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2.5 w-4 rounded-full border border-dashed border-line-strong" /> outside service
       </span>
     </div>
   )

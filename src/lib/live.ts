@@ -20,6 +20,10 @@ const TIME_FIELD: Record<TableName, string | null> = {
   issue: 'issued',
   heat: 'started',
   payment: 'run_at',
+  vat_check: 'checked',
+  sanctions_screen: 'screened',
+  bank_ack: 'acked',
+  fx_rate: 'loaded',
 }
 
 /** Human label for every table, used wherever provenance is shown. */
@@ -40,6 +44,10 @@ export const TABLE_LABEL: Record<TableName, string> = {
   issue: 'd365.issue',
   heat: 'mill.heat',
   payment: 'reval.payment',
+  vat_check: 'vat.vat_check',
+  sanctions_screen: 'sanctions.sanctions_screen',
+  bank_ack: 'ebanking.bank_ack',
+  fx_rate: 'fx.fx_rate',
 }
 
 export function systemOfTable(table: TableName): string | undefined {
@@ -117,9 +125,9 @@ export function plantPulse(minutes = 60) {
 
 /** Which live tables belong to each workflow, so a process can show real volume. */
 export const PROCESS_TABLES: Record<string, TableName[]> = {
-  P1: ['gate_pass', 'weighbridge_ticket', 'MSEG', 'captured_invoice', 'RBKP', 'output_document', 'payment'],
+  P1: ['gate_pass', 'weighbridge_ticket', 'MSEG', 'captured_invoice', 'RBKP', 'output_document', 'payment', 'vat_check', 'sanctions_screen'],
   P2: ['receipt', 'scrap_batch', 'chemistry', 'lab_result', 'stock_posting', 'issue'],
-  P3: ['EKPO', 'MSEG', 'RBKP', 'payment'],
+  P3: ['EKPO', 'MSEG', 'RBKP', 'payment', 'vat_check', 'sanctions_screen', 'bank_ack', 'fx_rate'],
   P4: ['heat', 'AFRU', 'output_document'],
   P5: [],
   P6: [],

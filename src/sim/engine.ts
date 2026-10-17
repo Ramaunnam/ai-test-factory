@@ -78,6 +78,20 @@ export const FAULTS: FaultDef[] = [
     breaks: 'The production confirmation takes 25 to 45 minutes instead of 3 to 10.',
     rate: 0.25,
   },
+  {
+    id: 'F9',
+    label: 'Sanctions list not refreshed',
+    where: 'IF-16 SAP Steel to the sanctions screening service',
+    breaks: 'The vendor is screened against yesterday’s list, so a name added today is not seen before the invoice is booked.',
+    rate: 0.03,
+  },
+  {
+    id: 'F10',
+    label: 'Exchange rate missing',
+    where: 'IF-18 exchange-rate service to SAP Steel',
+    breaks: 'No rate file arrives for the day, so foreign-currency invoices are booked at yesterday’s rate.',
+    rate: 0.1,
+  },
 ]
 
 /* -------------------------------------------------------------------------- */
@@ -99,6 +113,27 @@ const NOMINAL: Record<string, { ni: number; cr: number; mo: number }> = {
   'SCR-321-SHRED': { ni: 9.2, cr: 17.6, mo: 0.3 },
 }
 const VENDORS = ['VEND-1042', 'VEND-1043', 'VEND-1044', 'VEND-1045'] as const
+const VAT_NUMBERS: Record<string, string> = {
+  'VEND-1042': 'GB 418 7721 03',
+  'VEND-1043': 'DE 274 118 902',
+  'VEND-1044': 'NL 8201 44 771 B01',
+  'VEND-1045': 'PL 527 2714 880',
+}
+/** A few suppliers invoice in something other than euro. */
+const FX_PAIRS = ['USD/EUR', 'GBP/EUR'] as const
+const FX_BASE: Record<string, number> = { 'USD/EUR': 0.918, 'GBP/EUR': 1.167 }
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** The simulated clock starts 06:00 on 14 Oct 2026, same as the rest of the app. */
+const SIM_EPOCH_MS = new Date(2026, 9, 14, 6, 0, 0).getTime()
+
+function simDayOf(minutes: number) {
+  return Math.floor(minutes / 1440)
+}
+
+function simDateLabel(minutes: number) {
+  const d = new Date(SIM_EPOCH_MS + minutes * 60_000)
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`
+}
 
 const RETAIN_MINUTES = 24 * 60
 const MAX_EVENTS = 400
@@ -122,6 +157,10 @@ function emptyDb(): Db {
     issue: [],
     heat: [],
     payment: [],
+    vat_check: [],
+    sanctions_screen: [],
+    bank_ack: [],
+    fx_rate: [],
   }
 }
 
@@ -142,8 +181,10 @@ class SimEngine {
     F6: true,
     F7: true,
     F8: true,
+    F9: true,
+    F10: true,
   }
-  hits: Record<FaultId, number> = { F1: 0, F2: 0, F3: 0, F4: 0, F5: 0, F6: 0, F7: 0, F8: 0 }
+  hits: Record<FaultId, number> = { F1: 0, F2: 0, F3: 0, F4: 0, F5: 0, F6: 0, F7: 0, F8: 0, F9: 0, F10: 0 }
   counters = { vehicles: 0, messages: 0 }
 
   private rng = new Rng(this.seed)
@@ -394,12 +435,12 @@ class SimEngine {
         },
         travel: this.rng.int(3, 8),
         fault: noPo ? 'F7' : undefined,
-        effect: () => this.threeWayMatch(gate_pass, ext, noPo ? '' : po.ebeln, net, amount),
+        effect: () => this.threeWayMatch(gate_pass, ext, noPo ? '' : po.ebeln, net, amount, po.vendor),
       })
     })
   }
 
-  private threeWayMatch(gate_pass: string, ext: string, ebeln: string, qty: number, amount: number) {
+  private threeWayMatch(gate_pass: string, ext: string, ebeln: string, qty: number, amount: number, vendor: string) {
     const grs = this.db.MSEG.filter((m) => m.xblnr === gate_pass)
     let status: 'Posted' | 'Parked' = 'Posted'
     let reason = ''
@@ -420,6 +461,12 @@ class SimEngine {
     }
 
     const belnr = this.id('51', 8)
+
+    // Most suppliers invoice in euro. The rest are booked at the rate of the day.
+    const currency = this.rng.chance(0.25) ? (this.rng.chance(0.5) ? 'USD' : 'GBP') : 'EUR'
+    const pair = `${currency}/EUR`
+    const rateRow = currency === 'EUR' ? undefined : [...this.db.fx_rate].reverse().find((f) => f.pair === pair)
+
     this.db.RBKP.push({
       belnr,
       ext_invoice: ext,
@@ -429,8 +476,12 @@ class SimEngine {
       amount_eur: amount,
       status,
       reason,
+      currency,
+      fx_rate_used: rateRow ? rateRow.rate : null,
       posted: this.now,
     })
+
+    this.complianceChecks(belnr, vendor, gate_pass)
     this.log(
       status === 'Posted'
         ? `Invoice ${ext} posted against ${gate_pass}`
@@ -676,29 +727,140 @@ class SimEngine {
     })
   }
 
+  /**
+   * Before SAP books a supplier invoice it asks two outside services: is the VAT
+   * number still valid, and is this vendor on today's sanctions list.
+   */
+  private complianceChecks(belnr: string, vendor: string, gate_pass: string) {
+    const vat = VAT_NUMBERS[vendor] ?? 'GB 000 0000 00'
+    this.send({
+      interfaceId: 'IF-15',
+      from: 'SAP Steel',
+      to: 'VAT Service',
+      key: gate_pass,
+      summary: `VAT check for ${vendor}`,
+      payload: { interface: 'IF-15', belnr, vendor, vatNumber: vat },
+      travel: this.rng.int(1, 3),
+      effect: () => {
+        this.db.vat_check.push({
+          check: this.id('VAT-', 5),
+          belnr,
+          vendor,
+          vat_number: vat,
+          valid: true,
+          checked: this.now,
+        })
+      },
+    })
+
+    const stale = this.fault('F9')
+    const today = simDayOf(this.now)
+    const listDay = stale ? Math.max(0, today - 1) : today
+    const listDate = simDateLabel(listDay * 1440)
+    this.send({
+      interfaceId: 'IF-16',
+      from: 'SAP Steel',
+      to: 'Sanctions Service',
+      key: gate_pass,
+      summary: `Sanctions screening for ${vendor}`,
+      payload: { interface: 'IF-16', belnr, vendor, listDate },
+      travel: this.rng.int(1, 3),
+      fault: stale ? 'F9' : undefined,
+      effect: () => {
+        this.db.sanctions_screen.push({
+          screen: this.id('SCR-', 5),
+          belnr,
+          vendor,
+          list_day: listDay,
+          list_date: listDate,
+          hit: false,
+          screened: this.now,
+        })
+        if (stale) {
+          this.log(
+            `${vendor} was screened against the sanctions list of ${listDate}, not the list of today`,
+            gate_pass,
+            'danger',
+          )
+        }
+      },
+    })
+  }
+
+  /** The exchange-rate file, loaded once a day at 06:00. */
+  private loadRates() {
+    const day = simDayOf(this.now)
+    const date = simDateLabel(this.now)
+    if (this.fault('F10')) {
+      this.log(`No exchange-rate file arrived for ${date}; the rates of the day before stay in place`, 'fx-rates', 'danger')
+    } else {
+      FX_PAIRS.forEach((pair) => {
+        const rate = Math.round(FX_BASE[pair] * (1 + this.rng.int(-120, 120) / 10000) * 10000) / 10000
+        this.send({
+          interfaceId: 'IF-18',
+          from: 'FX Service',
+          to: 'SAP Steel',
+          key: 'fx-rates',
+          summary: `${pair} ${rate} for ${date}`,
+          payload: { interface: 'IF-18', pair, rate, date },
+          travel: this.rng.int(1, 3),
+          effect: () => {
+            this.db.fx_rate.push({ day, date, pair, rate, loaded: this.now })
+            if (this.db.fx_rate.length > 24) this.db.fx_rate.splice(0, this.db.fx_rate.length - 24)
+          },
+        })
+      })
+    }
+    this.at(1440, () => this.loadRates())
+  }
+
   /** Hourly payment run. */
   private paymentRun() {
     const paid = new Set(this.db.payment.map((p) => p.belnr))
     const due = this.db.RBKP.filter((r) => r.status === 'Posted' && !paid.has(r.belnr))
     if (due.length) {
+      const run = this.id('PR-', 5)
+      const total = due.reduce((n, d) => n + d.amount_eur, 0)
       this.send({
         interfaceId: 'IF-11',
         from: 'SAP Steel',
         to: 'Reval',
         key: 'payment-run',
         summary: `Payment file · ${due.length} invoices`,
-        payload: { interface: 'IF-11', invoices: due.map((d) => d.belnr), count: due.length },
+        payload: { interface: 'IF-11', payRun: run, invoices: due.map((d) => d.belnr), count: due.length },
         travel: this.rng.int(2, 6),
         effect: () => {
           due.forEach((d) =>
             this.db.payment.push({
               pay: this.id('PY-', 5),
               belnr: d.belnr,
+              vendor: this.db.EKPO.find((e) => e.ebeln === d.ebeln)?.vendor ?? 'VEND-1042',
               amount_eur: d.amount_eur,
               run_at: this.now,
             }),
           )
           this.log(`Payment run sent ${due.length} invoices to Reval`, 'payment-run', 'success')
+        },
+      })
+
+      this.send({
+        interfaceId: 'IF-17',
+        from: 'SAP Steel',
+        to: 'eBanking',
+        key: 'payment-run',
+        summary: `Payment instruction ${run} · ${due.length} invoices`,
+        payload: { interface: 'IF-17', payRun: run, count: due.length, amountEur: total },
+        travel: this.rng.int(3, 9),
+        effect: () => {
+          this.db.bank_ack.push({
+            ack: this.id('ACK-', 5),
+            pay_run: run,
+            invoices: due.length,
+            amount_eur: total,
+            status: 'Acknowledged',
+            acked: this.now,
+          })
+          this.log(`The bank acknowledged payment run ${run}`, 'payment-run', 'success')
         },
       })
     }
@@ -755,6 +917,11 @@ class SimEngine {
     this.db.issue = keep(this.db.issue, (r) => r.issued)
     this.db.heat = keep(this.db.heat, (r) => r.started)
     this.db.payment = keep(this.db.payment, (r) => r.run_at)
+    this.db.vat_check = keep(this.db.vat_check, (r) => r.checked)
+    this.db.sanctions_screen = keep(this.db.sanctions_screen, (r) => r.screened)
+    this.db.bank_ack = keep(this.db.bank_ack, (r) => r.acked)
+    // The rate of the day is still needed by invoices booked just before midnight,
+    // so fx_rate is capped by row count instead of being pruned by age.
     this.messages = this.messages.filter((m) => m.arriveAt >= cutoff)
   }
 
@@ -785,8 +952,9 @@ class SimEngine {
     this.seq = 1
     this.eventSeq = 1
     this.counters = { vehicles: 0, messages: 0 }
-    this.hits = { F1: 0, F2: 0, F3: 0, F4: 0, F5: 0, F6: 0, F7: 0, F8: 0 }
+    this.hits = { F1: 0, F2: 0, F3: 0, F4: 0, F5: 0, F6: 0, F7: 0, F8: 0, F9: 0, F10: 0 }
 
+    this.at(0, () => this.loadRates())
     this.at(1, () => this.scheduleTrucks())
     this.at(3, () => this.scheduleWagons())
     this.at(12, () => this.scheduleHeats())
