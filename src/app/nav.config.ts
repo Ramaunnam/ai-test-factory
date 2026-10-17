@@ -1,5 +1,6 @@
 import {
   Activity,
+  ListOrdered,
   CheckSquare,
   FlaskConical,
   GitCompareArrows,
@@ -60,6 +61,15 @@ export const NAV: NavItem[] = [
     path: '/landscape',
     roles: ALL,
     blurb: 'Ten systems, fourteen interfaces, coloured by health',
+  },
+  {
+    id: 'journey',
+    label: 'Testing Journey',
+    icon: ListOrdered,
+    group: 'OVERVIEW',
+    path: '/journey',
+    roles: ALL,
+    blurb: 'The whole testing process as eight clear steps',
   },
   {
     id: 'ontology',

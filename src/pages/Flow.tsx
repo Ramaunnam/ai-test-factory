@@ -30,6 +30,7 @@ import {
   type Column,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
+import { JourneyBar } from '@/components/domain/JourneyBar'
 import { FlowMap, MapLegend } from '@/components/domain/FlowMap'
 import { TraceTimeline } from '@/components/domain/TraceTimeline'
 import { SourceNote } from '@/components/domain/SourceNote'
@@ -524,6 +525,7 @@ export function LiveChecksPage() {
 
   return (
     <>
+      <JourneyBar step={6} />
       <PageHeader
         title="Live Checks"
         subtitle="Nine rules written in business language, run against the real data in all nine systems."

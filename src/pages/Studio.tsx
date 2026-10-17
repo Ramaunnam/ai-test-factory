@@ -19,6 +19,7 @@ import {
   Switch,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
+import { JourneyBar } from '@/components/domain/JourneyBar'
 import { PROCESSES, SCENARIOS, type Scenario } from '@/data'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { store, useStore } from '@/data/appStore'
@@ -200,6 +201,7 @@ export function StudioPage() {
 
   return (
     <>
+      <JourneyBar step={3} />
       <PageHeader
         title="Test Studio"
         subtitle="Scenarios are written from the ontology and the live data, then approved by a key user before they run."
@@ -415,6 +417,7 @@ export function TestDataPage() {
 
   return (
     <>
+      <JourneyBar step={4} />
       <PageHeader
         title="Test Data"
         subtitle="Linked records that are safe to use: a purchase order arrives with its vendor and material, a scrap batch with its chemistry."

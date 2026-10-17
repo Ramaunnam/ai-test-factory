@@ -17,6 +17,7 @@ import {
   Switch,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
+import { JourneyBar } from '@/components/domain/JourneyBar'
 import { MultiLineChart } from '@/components/charts'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
@@ -120,6 +121,7 @@ export function ReleasePage() {
 
   return (
     <>
+      <JourneyBar step={8} />
       <PageHeader
         title="Release & Close"
         subtitle="One gate decision for release R-2026.10, the criteria behind it, and what is safe to change before the month-end close."

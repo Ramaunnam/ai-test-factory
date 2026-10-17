@@ -14,6 +14,7 @@ import {
   StatTile,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
+import { JourneyBar } from '@/components/domain/JourneyBar'
 import { WorkflowFlow } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { DISCOVERY_SESSIONS, PROCESSES, type DiscoverySession } from '@/data'
@@ -474,6 +475,7 @@ export function DiscoveryPage() {
 
   return (
     <>
+      <JourneyBar step={1} />
       <PageHeader
         title="Process Discovery"
         subtitle="Before a single test is written, the factory learns how the plant actually works: from recordings, the live system log and the written procedures."

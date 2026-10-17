@@ -20,6 +20,7 @@ import {
   StatTile,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
+import { JourneyBar } from '@/components/domain/JourneyBar'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { CHANGES, HEALING, PROCESSES, RECON_SETS, RUNS, SCENARIOS, SYSTEMS, type ReconRow, type ReconSet } from '@/data'
@@ -94,6 +95,7 @@ export function ChangeImpactPage() {
 
   return (
     <>
+      <JourneyBar step={7} />
       <PageHeader
         title="Change & Regression"
         subtitle="Six changes are in flight. For each one: what changed, what could go wrong, and what we do about it."

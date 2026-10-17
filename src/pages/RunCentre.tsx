@@ -25,6 +25,7 @@ import {
   StatTile,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
+import { JourneyBar } from '@/components/domain/JourneyBar'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { PROCESSES, RUNS, SCENARIOS } from '@/data'
@@ -220,6 +221,7 @@ export function RunCentrePage() {
 
   return (
     <>
+      <JourneyBar step={5} />
       <PageHeader
         title="Run Centre"
         subtitle="Pick scenarios, run them step by step, and watch the workflow light up as each stage is proven."

@@ -26,15 +26,15 @@ import {
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { FindingsBar, TrendChart } from '@/components/charts'
-import { HealthLegend, WorkflowFlow } from '@/components/domain/WorkflowFlow'
+import { HealthLegend } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
-import { PROCESSES, REQUIREMENTS, RUNS, SCENARIOS, TREND_30_DAYS } from '@/data'
+import { PROCESSES, REQUIREMENTS, RUNS, SCENARIOS, TREND_30_DAYS, type StageHealth } from '@/data'
 import { useStore } from '@/data/appStore'
 import { useChecks, useSim } from '@/sim/useSim'
 import { confidence } from '@/lib/score'
 import { useConfidenceInput, scoreIf } from '@/lib/useConfidenceInput'
 import { interfaceStats } from '@/lib/interfaceStats'
-import { interfaceTraffic, plantPulse, processActivity, systemActivity, TABLE_LABEL } from '@/lib/live'
+import { interfaceTraffic, plantPulse, systemActivity } from '@/lib/live'
 import { fmtSim, num } from '@/lib/format'
 import { useDrawer } from '@/providers/DrawerProvider'
 
@@ -44,6 +44,27 @@ const TABS = [
   { label: 'Month-End Load', path: '/load' },
   { label: 'Impact Simulator', path: '/simulator' },
 ]
+
+const HEALTH_PILL: Record<StageHealth, string> = {
+  working: 'border-success/40 bg-success-soft/50',
+  watch: 'border-accent/40 bg-accent-soft/50',
+  issue: 'border-danger/45 bg-danger-soft/50',
+  'not tested': 'border-line bg-surface2/60',
+}
+
+const HEALTH_WORD: Record<StageHealth, string> = {
+  working: 'Working',
+  watch: 'Watch',
+  issue: 'Issue',
+  'not tested': 'Not tested',
+}
+
+const HEALTH_TONE: Record<StageHealth, 'success' | 'warning' | 'danger' | 'neutral'> = {
+  working: 'success',
+  watch: 'warning',
+  issue: 'danger',
+  'not tested': 'neutral',
+}
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -519,83 +540,58 @@ export function HealthPage() {
       {/* ---------------------------------------------------------------- */}
       {/* workflow health                                                    */}
       {/* ---------------------------------------------------------------- */}
-      <SectionTitle
-        title="Workflow health, stage by stage"
-        hint="Six workflows, each with the live volume, the checks covering it and anything open against it."
-        actions={<HealthLegend />}
-      />
-      <div className="mb-4 grid gap-3">
-        {PROCESSES.map((p) => {
-          const act = processActivity(p.id, 60)
-          const findings = openFindings.filter((f) => f.process === p.id)
-          const scenarios = SCENARIOS.filter((s) => s.process === p.id)
-          const stageChecks = checks.filter((c) => c.process === p.id)
-          return (
-            <Card key={p.id}>
-              <CardHeader
-                title={`${p.id} · ${p.name}`}
-                subtitle={p.summary}
-                actions={
-                  <div className="flex flex-wrap items-center gap-2">
-                    {act.simulated ? (
-                      <Badge tone="info">{num(act.recent)} records this hour</Badge>
-                    ) : (
-                      <Badge tone="neutral">not simulated live</Badge>
-                    )}
-                    {stageChecks.length > 0 && (
-                      <Badge tone={stageChecks.every((c) => c.status === 'pass') ? 'success' : 'danger'}>
-                        {stageChecks.filter((c) => c.status === 'pass').length} of {stageChecks.length} checks pass
-                      </Badge>
-                    )}
-                    {findings.length > 0 && (
-                      <Badge tone="danger">{findings.length} open {findings.length === 1 ? 'finding' : 'findings'}</Badge>
-                    )}
-                    <Button size="sm" variant="ghost" onClick={() => navigate(`/ontology?process=${p.id}`)}>
-                      Open workflow
-                    </Button>
+      <Card className="mb-4">
+        <CardHeader
+          title="Workflow health"
+          subtitle="Each business process at a glance. Open one for the detail."
+          actions={<HealthLegend />}
+        />
+        <CardBody className="space-y-1.5">
+          {PROCESSES.map((p) => {
+            const findings = openFindings.filter((f) => f.process === p.id)
+            const worst: StageHealth = p.stages.some((s) => s.health === 'issue')
+              ? 'issue'
+              : p.stages.some((s) => s.health === 'watch')
+                ? 'watch'
+                : p.stages.some((s) => s.health === 'working')
+                  ? 'working'
+                  : 'not tested'
+            return (
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-line px-3 py-2.5 transition-colors hover:bg-surface2"
+              >
+                <div className="min-w-[220px] flex-1">
+                  <div className="text-sm font-medium text-text">
+                    {p.id} · {p.name}
                   </div>
-                }
-              />
-              <CardBody className="space-y-3 pt-4">
-                <WorkflowFlow process={p} onStageClick={(id) => navigate(`/ontology?process=${p.id}&stage=${id}`)} />
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-muted">
-                  <span>
-                    <span className="text-subtle">scenarios</span>{' '}
-                    <button type="button" className="font-mono text-primary hover:underline" onClick={() => navigate('/studio')}>
-                      {scenarios.length}
-                    </button>
-                  </span>
-                  <span>
-                    <span className="text-subtle">records held</span>{' '}
-                    <span className="font-mono text-text">{num(act.total)}</span>
-                  </span>
-                  {stageChecks.length > 0 && (
-                    <span>
-                      <span className="text-subtle">checks</span>{' '}
-                      {stageChecks.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => navigate('/flow/checks')}
-                          className={cn('ml-1 font-mono hover:underline', c.status === 'pass' ? 'text-success' : 'text-danger')}
-                        >
-                          {c.id}
-                        </button>
-                      ))}
-                    </span>
-                  )}
-                  {act.simulated && (
-                    <span className="min-w-0 truncate">
-                      <span className="text-subtle">tables</span>{' '}
-                      <span className="font-mono text-muted">{act.tables.map((t) => TABLE_LABEL[t]).join(' · ')}</span>
-                    </span>
-                  )}
+                  <div className="truncate text-xs text-muted">{p.summary}</div>
                 </div>
-              </CardBody>
-            </Card>
-          )
-        })}
-      </div>
+
+                <div className="flex shrink-0 items-center gap-1" aria-label={`${p.stages.length} stages`}>
+                  {p.stages.map((stage) => (
+                    <span
+                      key={stage.id}
+                      title={`${stage.name} — ${HEALTH_WORD[stage.health]}`}
+                      className={cn('h-2.5 w-7 rounded-full border', HEALTH_PILL[stage.health])}
+                    />
+                  ))}
+                </div>
+
+                <Badge tone={HEALTH_TONE[worst]}>{HEALTH_WORD[worst]}</Badge>
+
+                <span className="w-[110px] shrink-0 text-xs text-muted">
+                  {findings.length} open {findings.length === 1 ? 'finding' : 'findings'}
+                </span>
+
+                <Button size="sm" variant="link" onClick={() => navigate(`/ontology?process=${p.id}`)}>
+                  See details →
+                </Button>
+              </div>
+            )
+          })}
+        </CardBody>
+      </Card>
 
       {/* ---------------------------------------------------------------- */}
       {/* findings + requirements                                            */}

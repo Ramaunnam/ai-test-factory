@@ -60,6 +60,7 @@ const regression = await import('@/pages/Regression')
 const govern = await import('@/pages/Govern')
 const reports = await import('@/pages/Reports')
 const misc = await import('@/pages/Misc')
+const journey = await import('@/pages/Journey')
 
 type Case = [label: string, pattern: string, path: string, Comp: React.ComponentType]
 
@@ -81,6 +82,7 @@ const DrawerContentProbe = () => (
 
 const CASES: Case[] = [
   ['Drawer content (navigates)', '/', '/', DrawerContentProbe],
+  ['Testing Journey', '/journey', '/journey?step=5', journey.JourneyPage],
   ['Command Centre / Health', '/', '/', cc.HealthPage],
   ['Command Centre / Release', '/release', '/release', cc.ReleasePage],
   ['Command Centre / Load', '/load', '/load', cc.LoadPage],
