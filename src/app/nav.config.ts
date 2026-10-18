@@ -51,6 +51,7 @@ export const NAV: NavItem[] = [
       { label: 'Release & Close', path: '/release' },
       { label: 'Month-End Load', path: '/load' },
       { label: 'Impact Simulator', path: '/simulator' },
+      { label: 'Framework & Pod', path: '/offer' },
     ],
   },
   {

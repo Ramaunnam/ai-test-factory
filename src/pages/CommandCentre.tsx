@@ -23,7 +23,7 @@ import { JourneyBar } from '@/components/domain/JourneyBar'
 import { MultiLineChart } from '@/components/charts'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
-import { CHANGES, INTERFACES, PROCESSES, RUNS, SYSTEMS } from '@/data'
+import { CHANGES, INTERFACES, PROCESSES, RUNS, SCENARIOS, SYSTEMS } from '@/data'
 import { useStore, type Finding } from '@/data/appStore'
 import { useChecks } from '@/sim/useSim'
 import { confidence } from '@/lib/score'
@@ -39,6 +39,7 @@ const TABS = [
   { label: 'Release & Close', path: '/release' },
   { label: 'Month-End Load', path: '/load' },
   { label: 'Impact Simulator', path: '/simulator' },
+  { label: 'Framework & Pod', path: '/offer' },
 ]
 
 /* -------------------------------------------------------------------------- */
@@ -1239,6 +1240,344 @@ export function SimulatorPage() {
           </div>
         </>
       )}
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Framework & Pod                                                            */
+/* -------------------------------------------------------------------------- */
+
+const FRAMEWORK_STEPS: { n: number; name: string; what: string; route: string; see: string }[] = [
+  {
+    n: 1,
+    name: 'Learn',
+    what: 'Read the real process from recordings, the system log and the written procedures, then let key users correct it.',
+    route: '/discovery/map',
+    see: 'Open the process map',
+  },
+  {
+    n: 2,
+    name: 'Build',
+    what: 'Write the scenarios and the linked test data from the approved map, and have a key user approve them.',
+    route: '/studio',
+    see: 'Open Test Studio',
+  },
+  {
+    n: 3,
+    name: 'Run',
+    what: 'Run them on a schedule, after every change, for every project, and heal the steps a screen change broke.',
+    route: '/run/schedules',
+    see: 'Open the schedules',
+  },
+  {
+    n: 4,
+    name: 'Watch',
+    what: 'Compare what each system holds for the same load, every few minutes, and raise a finding the moment they differ.',
+    route: '/flow/checks',
+    see: 'Open the live checks',
+  },
+  {
+    n: 5,
+    name: 'Prove',
+    what: 'Seal the run, its steps, its data and its approvals into one pack an auditor can read unchanged.',
+    route: '/evidence',
+    see: 'Open the evidence',
+  },
+]
+
+const POD_ROLES: { role: string; does: string; worksOn: string }[] = [
+  {
+    role: 'Pod lead',
+    does: 'Owns the result, runs the weekly review with the key users and decides what goes in the next release.',
+    worksOn: 'Across every project',
+  },
+  {
+    role: 'SAP and D365 test specialists',
+    does: 'Know the processes and the configuration, write the business rules the scenarios prove.',
+    worksOn: 'SAP release Nov · D365 recycling update',
+  },
+  {
+    role: 'Automation engineers',
+    does: 'Build and keep the runs, the test data and the interface comparisons, and keep the suite green.',
+    worksOn: 'Every workflow',
+  },
+  {
+    role: 'AI agent engineer',
+    does: 'Builds the discovery, scenario, test data, healing and evidence agents, and keeps them honest.',
+    worksOn: 'The factory itself',
+  },
+]
+
+const BENEFITS: { label: string; before: number; after: number; unit: string; note: string }[] = [
+  { label: 'Re-test cycle time', before: 15, after: 1, unit: 'days', note: 'from a change being ready to the re-test being signed off' },
+  { label: 'Key-user manual testing', before: 160, after: 40, unit: 'hours a release', note: 'hours spent clicking through screens by hand' },
+  { label: 'Month-end freeze', before: 10, after: 3, unit: 'days', note: 'days when nothing may change' },
+  { label: 'Defects found before production', before: 45, after: 90, unit: '%', note: 'share of defects caught before go-live' },
+  { label: 'Key-user hours freed', before: 0, after: 120, unit: 'hours a release', note: 'hours handed back to the business' },
+]
+
+const START_PLAN: { n: number; name: string; weeks: string; what: string; out: string }[] = [
+  {
+    n: 1,
+    name: 'Pilot',
+    weeks: '6 weeks',
+    what: 'One workflow end to end: gate to invoice. Discovery, scenarios, test data, runs, live checks and one evidence pack.',
+    out: 'A working factory on one process, and a measured re-test time.',
+  },
+  {
+    n: 2,
+    name: 'Extend',
+    weeks: 'weeks 7 to 12',
+    what: 'The remaining main processes, the interface comparisons, the schedules and the month-end load profile.',
+    out: 'Every main process automated, running nightly and after every change.',
+  },
+  {
+    n: 3,
+    name: 'Run',
+    weeks: 'ongoing',
+    what: 'The pod owns the suite: new releases, new changes, new systems, and the evidence every release needs.',
+    out: 'A release gate anybody can read, and no surprise at the close.',
+  },
+]
+
+const TOOL_VS_POD: { question: string; tool: string; pod: string }[] = [
+  { question: 'Who writes the tests', tool: 'You do, after the licence is signed.', pod: 'The pod writes them from the discovered process, and a key user approves them.' },
+  { question: 'Who keeps them working', tool: 'Your team, every time a screen changes.', pod: 'The pod, with the healing agent proposing the fix and a key user approving it.' },
+  { question: 'What happens when a test fails', tool: 'A red line in a report.', pod: 'A finding with the cause, the records on both sides and the fix to make.' },
+  { question: 'Evidence for an auditor', tool: 'Export a log and tidy it up by hand.', pod: 'A sealed pack per release, with a tamper-proof fingerprint.' },
+  { question: 'What you are buying', tool: 'A tool, and the work of running it.', pod: 'A result: a landscape you can release on, with the work included.' },
+]
+
+export function OfferPage() {
+  const navigate = useNavigate()
+  const store = useStore()
+  const input = useConfidenceInput()
+  const conf = confidence(input)
+
+  /** Today's freeze window, read from the close calendar on Release & Close. */
+  const freezeToday = MILESTONES[MILESTONES.length - 1].day - MILESTONES[0].day + 1
+  const processesWithTests = PROCESSES.filter((p) => SCENARIOS.some((s) => s.process === p.id)).length
+  const automatedPct = Math.round((processesWithTests / PROCESSES.length) * 100)
+  const packs = store.evidencePacks.filter((p) => p.locked).length
+
+  const commitments: { target: string; today: string; live: boolean; route: string }[] = [
+    {
+      target: 'A full re-test inside 1 day of a change being ready',
+      today: 'About 3 weeks of key-user testing (illustrative)',
+      live: false,
+      route: '/regression',
+    },
+    {
+      target: '100 % of the main processes automated within 12 weeks',
+      today: `${automatedPct} % of the ${PROCESSES.length} workflows have scenarios today`,
+      live: true,
+      route: '/studio',
+    },
+    {
+      target: 'An evidence pack sealed for every release',
+      today: `${packs} packs sealed and locked so far`,
+      live: true,
+      route: '/evidence',
+    },
+    {
+      target: 'Month-end freeze down from 10 days to 3',
+      today: `${freezeToday} days on the current close calendar`,
+      live: true,
+      route: '/release',
+    },
+    {
+      target: 'Key-user manual testing hours cut by three quarters',
+      today: 'Around 160 hours a release today (illustrative)',
+      live: false,
+      route: '/load',
+    },
+  ]
+
+  return (
+    <>
+      <PageHeader
+        title="Command Centre"
+        subtitle="Not just a tool. A testing framework plus a team (pod) that owns the result."
+        tabs={TABS}
+        actions={
+          <Button variant="primary" leftIcon={<ArrowRight size={15} />} onClick={() => navigate('/journey')}>
+            Open the Testing Journey
+          </Button>
+        }
+      />
+
+      <Card className="mb-4">
+        <CardHeader
+          title="The framework, in five steps"
+          subtitle="The same five steps the Testing Journey walks through, each one already working in this demo."
+          actions={
+            <Button size="sm" onClick={() => navigate('/journey')}>
+              The journey, step by step
+            </Button>
+          }
+        />
+        <CardBody className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {FRAMEWORK_STEPS.map((s) => (
+            <div key={s.n} className="flex flex-col rounded-md border border-line bg-surface2/50 px-3 py-2.5">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-primary-soft font-mono text-[10px] font-semibold text-primary">
+                  {s.n}
+                </span>
+                <span className="text-sm font-semibold text-text">{s.name}</span>
+              </div>
+              <p className="flex-1 text-[11.5px] leading-5 text-muted">{s.what}</p>
+              <Button size="sm" className="mt-2 self-start" onClick={() => navigate(s.route)}>
+                See it
+              </Button>
+            </div>
+          ))}
+        </CardBody>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader
+          title="The pod"
+          subtitle="A small team that owns the suite, not a licence and a hand-over."
+          actions={<Badge tone="neutral">Pod size is set per phase</Badge>}
+        />
+        <DataTable
+          rows={POD_ROLES}
+          rowKey={(r) => r.role}
+          columns={[
+            { key: 'role', header: 'Role', width: 260 },
+            { key: 'does', header: 'What they do' },
+            { key: 'worksOn', header: 'Works on', width: 280 },
+          ]}
+          empty="No roles defined."
+        />
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader
+          title="What we commit to"
+          subtitle="Each one is a number you can hold us to. Where the factory already measures it, today's value is live."
+          actions={<Badge tone="warning">Targets to agree</Badge>}
+        />
+        <DataTable
+          rows={commitments}
+          rowKey={(c) => c.target}
+          onRowClick={(c) => navigate(c.route)}
+          columns={[
+            { key: 'target', header: 'What we commit to' },
+            {
+              key: 'today',
+              header: 'Where it stands today',
+              render: (c) => (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-text">{c.today}</span>
+                  {c.live && <Badge tone="info">live</Badge>}
+                </span>
+              ),
+            },
+          ]}
+          empty="No commitments listed."
+        />
+        <SourceNote
+          title="Where today's values come from"
+          reads={[
+            { label: 'Scenarios', route: '/studio', note: 'which workflows already have tests' },
+            { label: 'Evidence packs', route: '/evidence', note: 'how many releases are already sealed' },
+            { label: 'Close calendar', route: '/release', note: 'how long the freeze lasts today' },
+          ]}
+          computes="reads the figures the factory already measures; the rest are marked illustrative until they are agreed"
+          feeds={[{ label: 'Release & Close', route: '/release' }]}
+        />
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader
+          title="Expected benefits"
+          subtitle="What changes once the framework and the pod are in place."
+          actions={<Badge tone="neutral">Illustrative</Badge>}
+        />
+        <CardBody className="space-y-3">
+          {BENEFITS.map((b) => {
+            const max = Math.max(b.before, b.after) || 1
+            const better = b.after > b.before
+            return (
+              <div key={b.label}>
+                <div className="mb-1 flex flex-wrap items-baseline gap-2">
+                  <span className="text-sm font-medium text-text">{b.label}</span>
+                  <span className="text-xs text-muted">{b.note}</span>
+                  <span className="ml-auto font-mono text-xs text-subtle">
+                    {b.before} → <span className={better ? 'text-success' : 'text-primary'}>{b.after}</span> {b.unit}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-16 shrink-0 text-[11px] text-subtle">today</span>
+                    <span className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface2">
+                      <span className="block h-full rounded-full bg-line-strong" style={{ width: `${Math.max(2, (b.before / max) * 100)}%` }} />
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-16 shrink-0 text-[11px] text-subtle">with a pod</span>
+                    <span className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface2">
+                      <span
+                        className={cn('block h-full rounded-full', better ? 'bg-success' : 'bg-primary')}
+                        style={{ width: `${Math.max(2, (b.after / max) * 100)}%` }}
+                      />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </CardBody>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader title="How we start" subtitle="Six weeks to a working factory on one process, then outward." />
+        <CardBody className="grid gap-3 md:grid-cols-3">
+          {START_PLAN.map((p) => (
+            <div key={p.n} className="rounded-md border border-line bg-surface2/50 px-3 py-2.5">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-ai-soft font-mono text-[10px] font-semibold text-ai">
+                  {p.n}
+                </span>
+                <span className="text-sm font-semibold text-text">{p.name}</span>
+                <Badge tone="neutral" className="ml-auto">
+                  {p.weeks}
+                </Badge>
+              </div>
+              <p className="text-[11.5px] leading-5 text-muted">{p.what}</p>
+              <p className="mt-1.5 text-[11.5px] leading-5 text-text">{p.out}</p>
+            </div>
+          ))}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="A tool demo, against a framework and a pod"
+          subtitle="The same five questions, answered both ways."
+        />
+        <DataTable
+          rows={TOOL_VS_POD}
+          rowKey={(r) => r.question}
+          columns={[
+            { key: 'question', header: '', width: 240 },
+            { key: 'tool', header: 'A tool demo' },
+            { key: 'pod', header: 'A framework and a pod' },
+          ]}
+          empty="Nothing to compare."
+        />
+        <CardBody className="flex flex-wrap items-center gap-3 border-t border-line pt-3">
+          <span className="text-sm text-muted">
+            Everything on this page is already working in this demo. The confidence score sitting at {conf.score} was
+            produced by the running plant, not written into a slide.
+          </span>
+          <Button variant="primary" className="ml-auto" onClick={() => navigate('/journey')}>
+            Walk the journey
+          </Button>
+        </CardBody>
+      </Card>
     </>
   )
 }
