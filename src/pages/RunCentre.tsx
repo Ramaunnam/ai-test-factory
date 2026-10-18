@@ -41,7 +41,15 @@ import { PROCESSES, RUNS, SCENARIOS } from '@/data'
 import { RUN_STEPS as DEMO_STEPS } from '@/data/runSteps'
 import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { store, useStore } from '@/data/appStore'
-import { ALL_PROJECTS, PROJECTS, projectById, projectOfProcess, projectOfSystems, useProjectFilter } from '@/data/projects'
+import {
+  ALL_PROJECTS,
+  PROJECTS,
+  projectById,
+  projectOfProcess,
+  projectOfSystem,
+  projectOfSystems,
+  useProjectFilter,
+} from '@/data/projects'
 import { SCHEDULE_WHEN, type ScheduleWhen } from '@/data/schedules'
 import { useToast } from '@/providers/ToastProvider'
 import { useRole } from '@/providers/RoleProvider'
@@ -71,7 +79,7 @@ export function RunCentrePage() {
   const [shot, setShot] = useState<number | null>(null)
   const findingRaised = useRef(false)
   const scheduleRef = useRef<string | null>(null)
-  const { matches } = useProjectFilter()
+  const { matches, withProject } = useProjectFilter()
 
   const filtered = SCENARIOS.filter(
     (s) => s.process === processFilter && (typeFilter === 'All' || s.type === typeFilter),
@@ -203,6 +211,7 @@ export function RunCentrePage() {
   const openFindings = appState.findings
     .filter((f) => f.status !== 'Closed')
     .filter((f) => !severityFilter || f.severity === severityFilter)
+    .filter((f) => matches(projectOfSystem(f.system)))
 
   return (
     <>
@@ -355,7 +364,7 @@ export function RunCentrePage() {
       <Card className="mb-4">
         <CardHeader
           title="Choose what to run"
-          subtitle="Thirty approved scenarios across six workflows, filtered by workflow and by type."
+          subtitle={`${filtered.length} of ${SCENARIOS.length} approved scenarios, filtered by workflow, by type and by the project in the header.`}
           actions={
             <div className="flex flex-wrap gap-1.5">
               {(['All', 'Positive', 'Negative', 'Regression'] as const).map((t) => (
@@ -378,6 +387,7 @@ export function RunCentrePage() {
           rowKey={(s) => s.id}
           onRowClick={(s) => navigate(`/studio?scenario=${s.id}`)}
           maxHeight={360}
+          empty="No approved scenario matches this workflow, type and project."
           columns={[
             { key: 'id', header: 'Scenario', mono: true, width: 100 },
             { key: 'name', header: 'What it proves' },
@@ -489,11 +499,11 @@ export function RunCentrePage() {
         hint="Everything raised by a run, a live check or an access proof, with the evidence attached."
         actions={
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip selected={!severityFilter} onClick={() => setParams({})}>
+            <Chip selected={!severityFilter} onClick={() => setParams(withProject())}>
               All
             </Chip>
             {(['Critical', 'High', 'Medium', 'Low'] as const).map((s) => (
-              <Chip key={s} selected={severityFilter === s} onClick={() => setParams({ severity: s })}>
+              <Chip key={s} selected={severityFilter === s} onClick={() => setParams(withProject({ severity: s }))}>
                 {s}
               </Chip>
             ))}
@@ -836,7 +846,6 @@ export function SchedulesPage() {
                           tone: s.on ? 'warning' : 'success',
                         })
                       }}
-                      label=""
                     />
                   </span>
                 ),

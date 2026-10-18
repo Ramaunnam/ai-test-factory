@@ -51,7 +51,7 @@ export function ChangeImpactPage() {
   const [baseline, setBaseline] = useState(RUNS[1].id)
   const [phase, setPhase] = useState<'idle' | 'running' | 'done'>('idle')
 
-  const { project, matches, setProject } = useProjectFilter()
+  const { project, matches, setProject, withProject } = useProjectFilter()
   const visibleChanges = CHANGES.filter((c) => matches(projectOfSystem(c.system)))
   const changeId = params.get('change') ?? (visibleChanges[0] ?? CHANGES[0]).id
   const change = CHANGES.find((c) => c.id === changeId) ?? CHANGES[0]
@@ -132,7 +132,7 @@ export function ChangeImpactPage() {
               key={c.id}
               interactive
               tone={c.id === change.id ? 'ai' : c.risk >= 70 ? 'danger' : 'default'}
-              onClick={() => setParams({ change: c.id })}
+              onClick={() => setParams(withProject({ change: c.id }))}
             >
               <CardBody className="flex gap-3">
                 <RiskDial value={c.risk} />

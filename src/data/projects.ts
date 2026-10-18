@@ -107,5 +107,12 @@ export function useProjectFilter() {
   /** Undefined means "belongs to every project", so it always shows. */
   const matches = (owner: string | undefined) => projectId === ALL_PROJECTS || !owner || owner === projectId
 
-  return { projectId, project, setProject, matches, filtering: projectId !== ALL_PROJECTS }
+  /**
+   * A page that replaces the whole query string must not throw the chosen
+   * project away, so it builds its new parameters through this.
+   */
+  const withProject = (next: Record<string, string> = {}) =>
+    projectId === ALL_PROJECTS ? next : { ...next, project: projectId }
+
+  return { projectId, project, setProject, matches, withProject, filtering: projectId !== ALL_PROJECTS }
 }

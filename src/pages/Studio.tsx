@@ -24,6 +24,7 @@ import { JourneyBar } from '@/components/domain/JourneyBar'
 import { PROCESSES, SCENARIOS, type Scenario } from '@/data'
 import { CONVERSION_LOG, RECORDED_ACTIONS, RECORDED_SCENARIO } from '@/data/recordings'
 import { SAMPLE_PROBLEMS, SCAN_LOG, type MasterDataProblem } from '@/data/masterData'
+import { projectOfSystems, useProjectFilter } from '@/data/projects'
 import { engine } from '@/sim/engine'
 import { useSimVersion } from '@/sim/useSim'
 import { StepScreenshot } from '@/components/domain/StepScreenshot'
@@ -100,11 +101,14 @@ export function StudioPage() {
   const [generated, setGenerated] = useState<Scenario[]>([])
   const [rule, setRule] = useState(false)
 
+  const scenarioProject = useProjectFilter()
   const all = useMemo(
     () => [...appState.recordedScenarios, ...generated, ...SCENARIOS],
     [generated, appState.recordedScenarios],
   )
-  const forProcess = all.filter((s) => s.process === processId)
+  const forProcess = all
+    .filter((s) => s.process === processId)
+    .filter((s) => scenarioProject.matches(projectOfSystems(s.systems)))
 
   const lines = [
     `Reading the ontology for ${processId} and its five stages…`,

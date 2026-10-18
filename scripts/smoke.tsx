@@ -57,6 +57,7 @@ const flow = await import('@/pages/Flow')
 const run = await import('@/pages/RunCentre')
 const interfaces = await import('@/pages/Interfaces')
 const regression = await import('@/pages/Regression')
+const { store } = await import('@/data/appStore')
 const govern = await import('@/pages/Govern')
 const reports = await import('@/pages/Reports')
 const misc = await import('@/pages/Misc')
@@ -121,6 +122,21 @@ const CASES: Case[] = [
   ['404', '*', '/nope', misc.NotFoundPage],
   ['Design system', '/kitchen-sink', '/kitchen-sink', misc.KitchenSinkPage],
 ]
+
+// the states a visitor reaches after pressing something: discovery run, the
+// map corrected, and a project chosen in the header
+store.setDiscoveryRun()
+store.applyProcessFeedback()
+
+const SECOND_PASS: Case[] = [
+  ['Discovery map, corrected', '/discovery/map', '/discovery/map', discovery.ProcessMapPage],
+  ['Discovery compare, run', '/discovery/compare', '/discovery/compare', discovery.ProcedureComparePage],
+  ['Schedules, one project', '/run/schedules', '/run/schedules?project=sap-nov', run.SchedulesPage],
+  ['Run Centre, one project', '/run', '/run?project=d365-recycling', run.RunCentrePage],
+  ['Regression, one project', '/regression', '/regression?project=yard-app', regression.ChangeImpactPage],
+  ['Interfaces, filtered', '/interfaces', '/interfaces?type=Financial&status=matched', interfaces.InterfacesPage],
+]
+CASES.push(...SECOND_PASS)
 
 let failed = 0
 for (const [label, pattern, path, Comp] of CASES) {

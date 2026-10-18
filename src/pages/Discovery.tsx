@@ -655,7 +655,8 @@ function DiscoveryPipeline({
           A process map
         </text>
         <text x={706} y={101} fontSize={10.5} fill={t.muted}>
-          5 stages · 3 systems · 2 loops
+          {MAP_V1.stages.length} stages · 3 systems · {MAP_V1.loops.length} loop
+          {MAP_V1.loops.length === 1 ? '' : 's'}
         </text>
       </g>
     </svg>

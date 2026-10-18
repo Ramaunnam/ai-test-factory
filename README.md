@@ -1,9 +1,9 @@
 # J2W AI Test Factory
 
 A client-demo-ready POC: AI-driven end-to-end test automation for a steel and recycling application
-landscape. There is no backend. The plant, the nine systems and every message between them are
-simulated in the browser, so the failures you see on screen are produced by the simulation rather
-than hard-coded.
+landscape. There is no backend. The plant, the ten systems, the four outside finance services and
+every message between them are simulated in the browser, so the failures you see on screen are
+produced by the simulation rather than hard-coded.
 
 All data is mock data. No real company, person, location or in-house system name appears anywhere.
 
@@ -21,30 +21,40 @@ Other scripts:
 | `npm run build` | Type-checks and builds to `dist/` (static, works from any host) |
 | `npm run preview` | Serves the built app |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run selftest` | Proves the simulation: all faults off → all nine checks pass |
-| `npm run smoke` | Renders all 31 pages headlessly and fails if any throws |
+| `npm run selftest` | Proves the simulation: all faults off → every check passes |
+| `npm run smoke` | Renders all 45 views headlessly and fails if any throws |
 | `npm run verify` | typecheck → selftest → smoke → build |
 
 ## The 15-minute demo path
 
-1. **Command Centre** — the confidence score, how it is calculated, and **What to do next**: the four
-   actions ranked by the points each would add to the score.
-2. **Process Ontology** — how a workflow is modelled, then the Ontology graph and the 11 AI agents.
-3. **Live Data Flow** — press *Run the plant*. Dots are real messages moving between systems. Click one
+1. **Testing Journey** — the whole process as eight steps, each one saying what goes in, what the AI
+   does, what comes out, which client requirement it covers, and opening the screen that proves it.
+2. **Command Centre** — the confidence score, how it is calculated, and **What to do next**: the four
+   actions ranked by the points each would add to the score. The **Projects** card shows the three
+   change projects running at once and the next three runs the factory will start on its own.
+3. **Process Discovery** — *Inputs*, then the **Process map**: press a box, say *Not right*, give the
+   reason, press **Apply feedback** and watch the map redraw as version 2.
+4. **Process Ontology** — how a workflow is modelled, then the Ontology graph and the 11 AI agents.
+5. **Live Data Flow** — press *Run the plant*. Dots are real messages moving between systems. Click one
    for its payload.
-4. **Live Checks** — open C1. Three trucks disagree between the weighbridge and SAP. Press
+6. **Live Checks** — open C1. Three trucks disagree between the weighbridge and SAP. Press
    **Raise finding**, then **Fix the cause and replay** and watch the check turn green.
-5. **Trace** — paste a failing gate pass and follow it through every system, record by record.
-6. **Run Centre** — *Run the P1 demo now*. One step self-heals, one negative step is blocked as
+7. **Trace** — paste a failing gate pass and follow it through every system, record by record.
+8. **Run Centre** — *Run the P1 demo now*. One step self-heals, one negative step is blocked as
    expected, one data check fails and raises F-001. End with the evidence pack.
-7. **Interface Testing** — open IF-01 and compare a damaged message field by field.
-8. **Change & Regression** — CH-204, then *Run regression* to compare before and after.
-9. **Month-End Load** — run the 5x profile. The interface-by-interface table names the one that bends
-   first (invoice capture, saturating at 3x) and ties it to the two invoices lost at the cut-off.
-10. **Impact Simulator as Plant Head** — switch role in the header; the menu and the landing page change.
+9. **Run Centre → Schedules** — five schedules, *Run now* on one, and the report lands with a link.
+10. **Interface Testing** — filter to financial API traffic, then open IF-01 and compare a damaged
+    message field by field.
+11. **Change & Regression** — CH-204, then *Run regression* to compare before and after.
+12. **Month-End Load** — run the 5x profile. The interface-by-interface table names the one that
+    bends first (invoice capture, saturating at 3x) and ties it to the two invoices lost at the
+    cut-off.
+13. **Impact Simulator as Plant Head** — switch role in the header; the menu and the landing page change.
     The verdict carries a number: the confidence score today against the score if the release shipped.
-11. **Release & Close** — the gate decision with its **five computed exit criteria**, so anyone can ask
+14. **Release & Close** — the gate decision with its **six computed exit criteria**, so anyone can ask
     "what turns this into GO?" and get an answer, plus the close calendar and the sign-off state.
+15. **Framework & Pod** — what is actually being offered: the five-step framework, the pod, what we
+    commit to, and how a six-week pilot starts.
 
 Press <kbd>Ctrl</kbd>+<kbd>K</kbd> at any point: the command palette reaches every page, system,
 interface, scenario, finding and simulation command.
@@ -83,7 +93,7 @@ src/
   providers/  theme, role, toast, drawer
   components/ ui/ primitives · charts/ theme-aware recharts · domain/ map, workflow, trace
   pages/      one file per nav item, exporting one component per tab
-  sim/        engine.ts the plant · checks.ts the nine rules · trace.ts follow one load
+  sim/        engine.ts the plant · checks.ts the fourteen rules · trace.ts follow one load
   data/       systems, interfaces, processes, scenarios, findings, changes, SoD, requirements
   lib/        cn, formatting, score, theme tokens
 ```
@@ -102,20 +112,22 @@ is the same on every page.
 identical. Simulated time runs from 06:00 on 14 Oct 2026 and the engine pre-runs eight hours on reset,
 which is why the first screen is already full of data.
 
-Three business flows produce records: a steel truck (gate → weighbridge → goods receipt → invoice →
-payment), a recycling load (gate → sortation → chemistry → stock) and a mill heat (confirmation and
-certificate). Everything that crosses a system boundary becomes a message with a payload, a travel time
+Three business flows produce records: a steel truck (gate → weighbridge → goods receipt → VAT and
+sanctions checks → invoice → payment → bank acknowledgement), a recycling load (gate → sortation →
+chemistry → stock → quality order → yard transfer) and a mill heat (confirmation and certificate).
+The exchange-rate file loads once a day at 06:00. Everything that crosses a system boundary becomes a message with a payload, a travel time
 and a status, which is what the moving dots on the map are.
 
-Eight **fault switches** are on by default and each one damages the data for real — a kilogram sent as a
-tonne, a stale tare, a gateway retry, a lost message, a renamed chemistry field, a wrong unit, a missing
-purchase order, a late mill file. Nine **live checks** compare the systems and explain each failing row in
+Ten **fault switches** are on by default and each one damages the data for real — a kilogram sent as a
+tonne, a stale tare, a gateway retry, a lost message, a renamed chemistry field, tonnes never converted
+to kilograms, a missing purchase order, a late mill file, a sanctions list that was not refreshed and a
+day with no exchange rate. Fourteen **live checks** compare the systems and explain each failing row in
 plain language.
 
 ```
 $ npm run selftest
-ALL FAULTS ON   2 of 9 checks pass · 538 records compared · 51 disagree
-ALL FAULTS OFF  9 of 9 checks pass · 542 records compared ·  0 disagree
+ALL FAULTS ON    4 of 14 checks pass · 881 records compared · 80 disagree
+ALL FAULTS OFF  14 of 14 checks pass · 892 records compared ·  0 disagree
 ```
 
 ### Adding things
@@ -124,7 +136,7 @@ ALL FAULTS OFF  9 of 9 checks pass · 542 records compared ·  0 disagree
   breadcrumb, command palette and role guard pick it up automatically.
 - **A theme token**: add it to both blocks in `src/index.css` and to `tailwind.config.js`.
 - **A live check**: add a definition to `CHECK_DEFS` and a case to `runCheck` in `src/sim/checks.ts`.
-- **A fault**: add it to `FAULTS` in `src/sim/engine.ts` and call `this.fault('F9')` where it should bite.
+- **A fault**: add it to `FAULTS` in `src/sim/engine.ts` and call `this.fault('F11')` where it should bite.
 
 ---
 

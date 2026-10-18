@@ -19,7 +19,7 @@ comes from.
 3. [Architecture at a glance](#3-architecture-at-a-glance)
 4. [The simulated plant](#4-the-simulated-plant)
 5. [The data model](#5-the-data-model)
-6. [The nine live checks](#6-the-nine-live-checks)
+6. [The fourteen live checks](#6-the-fourteen-live-checks)
 7. [Trace: following one load](#7-trace-following-one-load)
 8. [The confidence score](#8-the-confidence-score)
 9. [Navigation and the app shell](#9-navigation-and-the-app-shell)
@@ -35,9 +35,10 @@ comes from.
 
 ## 1. The idea in one page
 
-A steel and recycling group runs ten systems: a yard app, a scrap yard app, a laboratory app, a
-mill execution system, two SAP S/4HANA instances, D365, Esker, Lasernet and Reval. Fourteen
-interfaces move data between them. Nobody can answer the question a board actually asks:
+A steel and recycling group runs ten systems — a yard app, a scrap yard app, a laboratory app, a
+mill execution system, two SAP S/4HANA instances, D365, Esker, Lasernet and Reval — plus four
+outside finance services: VAT validation, sanctions screening, an eBanking gateway and an
+exchange-rate service. Nineteen interfaces move data between them. Nobody can answer the question a board actually asks:
 
 > *Can we trust this landscape enough to release on Friday and close the month on time?*
 
@@ -45,6 +46,11 @@ The factory answers it in one number, and then lets you walk all the way down fr
 a single truck that was weighed wrong at 09:42.
 
 It does that in four moves:
+
+The whole thing is laid out as eight steps on the **Testing Journey** (`/journey`), which is the
+page to open first in a demo: each step says what goes in, what the AI does, what comes out, who
+checks it, which of the client's requirements it covers, and opens the screen where it really
+happens.
 
 | Move | What happens | Where |
 |---|---|---|
@@ -54,7 +60,7 @@ It does that in four moves:
 | **Govern** | Score it, gate the release, prove segregation of duty, lock the evidence | Command Centre · Release & Close · Roles & SoD · Evidence |
 
 The demo's credibility rests on one thing: **the failures are not written into the data**. A
-simulated plant produces records, eight fault switches damage some of them in transit, and nine
+simulated plant produces records, ten fault switches damage some of them in transit, and fourteen
 checks then find the damage by comparing systems. Turn the faults off and replay, and every check
 goes green. That is provable from the command line in four seconds (`npm run selftest`).
 
@@ -74,7 +80,7 @@ npm run dev        # http://localhost:5173, or the next free port
 | `npm run preview` | Serve the built output |
 | `npm run typecheck` | `tsc --noEmit`, strict, no unused locals or parameters |
 | `npm run selftest` | Runs the plant headlessly and proves the fault/check invariant |
-| `npm run smoke` | Renders all 32 views in jsdom and fails if any throws |
+| `npm run smoke` | Renders all 45 views in jsdom and fails if any throws |
 | `npm run verify` | typecheck → selftest → smoke → build, in that order |
 
 The build is fully static (`base: './'`, `HashRouter`), so `dist/` can be opened from any web
@@ -87,7 +93,7 @@ server, an S3 bucket, or a shared drive.
 ```
                          ┌─────────────────────────────────────────┐
   src/sim/               │  SimEngine (engine.ts)                  │
-  the plant              │   seeded RNG → event queue → 15 tables  │
+  the plant              │   seeded RNG → event queue → 22 tables  │
                          │   + messages in flight + event log      │
                          └───────────────┬─────────────────────────┘
                                          │ useSyncExternalStore
@@ -231,7 +237,7 @@ The engine also keeps an **event log** of plain-language lines
 (`VH-7741 weighed: gross 38 420 kg, tare 13 560 kg, net 24 860 kg`), each tagged with its key, so
 clicking a line can open the trace. Process Discovery reads this same log as its "plant log" input.
 
-### 4.6 The eight fault switches
+### 4.6 The ten fault switches
 
 All on by default. Each one changes the data for real — nothing is cosmetic.
 
@@ -242,9 +248,11 @@ All on by default. Each one changes the data for real — nothing is cosmetic.
 | F3 | Gateway retry duplicate | IF-01 | 5 % | Delivers the same ticket twice, 1–3 min apart, creating two MSEG rows |
 | F4 | Lost message | IF-02 | 6 % | The recycling receipt never arrives; nothing is written |
 | F5 | Molybdenum renamed | IF-14 | 20 % | `mo_pct` arrives empty, so the grade cannot be certified |
-| F6 | Unit sent as TON | IF-03 | 7 % | Quantity in kilograms, unit field says TON |
+| F6 | Tonnes not converted to kilograms | IF-03, IF-19 | 7 % | The × 1000 step is skipped, so stock and transfers are 1 000 times wrong |
 | F7 | No purchase order | IF-06 | 6 % | Esker capture carries no PO, so the match parks it |
 | F8 | Late mill file | IF-04 | 25 % | Confirmation takes 25–45 min instead of 3–10 |
+| F9 | Sanctions list not refreshed | IF-16 | 3 % | The vendor is screened against yesterday's list before the invoice is booked |
+| F10 | Exchange rate missing | IF-18 | 10 % of days | No rate file arrives, so foreign-currency invoices use the day before's rate |
 
 F1 and F2 are mutually exclusive on a single message (a ticket is either divided or stale, not
 both), which is why C1 can always name one specific cause.
@@ -252,7 +260,8 @@ both), which is why C1 can always name one specific cause.
 ### 4.7 Retention and performance
 
 Only the last 24 simulated hours are kept. On every `advance`, rows older than that are pruned
-from all 15 tables and from the message list, so a demo left running for an hour stays fast. The
+from the tables and from the message list (the daily exchange rates are capped by row count
+instead, because an invoice booked just before midnight still needs the rate of its own day), so a demo left running for an hour stays fast. The
 event log keeps 400 lines, the message list 600.
 
 ### 4.8 The engine API
@@ -272,8 +281,9 @@ engine.subscribe(fn) / getVersion()  // for useSyncExternalStore
 
 ## 5. The data model
 
-Fifteen tables across nine simulated systems. The tenth system (SAP Service Centre) is on the map
-for landscape completeness and carries no live traffic.
+Twenty-two tables across thirteen simulated systems: the nine applications, plus the four outside
+finance services. SAP Service Centre is on the map for landscape completeness and carries no live
+traffic.
 
 | System | Tables | Key columns |
 |---|---|---|
@@ -281,17 +291,24 @@ for landscape completeness and carries no live traffic.
 | | `weighbridge_ticket` | ticket, gate_pass, vehicle, gross_kg, tare_kg, net_kg, registered_tare_kg, weighed |
 | SAP S/4HANA – Steel | `EKPO` | ebeln, vendor, material, price_eur_t, open_qty_kg |
 | | `MSEG` | mblnr, **xblnr = gate_pass**, ebeln, menge, meins, posted |
-| | `RBKP` | belnr, ext_invoice, gate_pass, ebeln, qty_kg, amount_eur, status, reason, posted |
+| | `RBKP` | belnr, ext_invoice, gate_pass, ebeln, qty_kg, amount_eur, status, reason, currency, fx_rate_used, posted |
 | | `AFRU` | rueck, heat, coils, weight_kg, delay_min, received |
 | Esker | `captured_invoice` | doc, ext_invoice, gate_pass, po, qty_kg, amount_eur, captured |
 | Lasernet | `output_document` | doc, type, **ref** (belnr or heat), created |
 | Scrap Yard Operations | `receipt` | receipt, gate_pass, vehicle, site, weight_kg, received |
 | | `scrap_batch` | batch, receipt, grade, weight_kg, created |
 | | `chemistry` | sample, batch, ni_pct, cr_pct, mo_pct, tested |
+| | `transfer` | transfer, batch, from_site, to_site, weight_kg, received_kg, unit, sent, received |
 | Laboratory app | `lab_result` | sample, batch, grade, status, tested |
 | D365 F&O – Recycling | `stock_posting` | journal, batch, item, qty, unit, warehouse, posted |
+| | `issue` | issue, batch, qty_kg, unit, issued |
+| | `quality_order` | order, batch, grade, ni_pct, cr_pct, mo_pct, result, created |
 | Mill Execution System | `heat` | heat, coils, weight_kg, started |
-| Reval | `payment` | pay, belnr, amount_eur, run_at |
+| Reval | `payment` | pay, belnr, vendor, amount_eur, run_at |
+| VAT validation service | `vat_check` | check, belnr, vendor, vat_number, valid, checked |
+| Sanctions screening service | `sanctions_screen` | screen, belnr, vendor, list_day, list_date, hit, screened |
+| eBanking gateway | `bank_ack` | ack, pay_run, invoices, amount_eur, status, acked |
+| Exchange-rate service | `fx_rate` | day, date, pair, rate, loaded |
 
 **The join keys are the whole point.** This is how one truck is followed across nine systems:
 
@@ -308,7 +325,7 @@ heat ──┬─ AFRU.heat
        └─ output_document.ref
 ```
 
-### The fourteen interfaces
+### The nineteen interfaces
 
 | Id | Carries | From → to | Live |
 |---|---|---|---|
@@ -324,16 +341,21 @@ heat ──┬─ AFRU.heat
 | IF-10 | Mill certificate | Mill → Lasernet | ● |
 | IF-11 | Payment file | SAP Steel → Reval | ● |
 | IF-12 | Charge plan | Yard → Mill | ○ |
-| IF-13 | Recycling documents | D365 → Lasernet | ○ |
+| IF-13 | Recycling documents | D365 → Lasernet | ● |
 | IF-14 | Chemistry result | Laboratory → Scrap Yard | ● |
+| IF-15 | VAT validation | SAP Steel → VAT service | ● |
+| IF-16 | Sanctions screening | SAP Steel → Sanctions service | ● |
+| IF-17 | Payment instruction | SAP Steel → eBanking gateway | ● |
+| IF-18 | Exchange rates | Exchange-rate service → SAP Steel | ● |
+| IF-19 | Stock transfer | Scrap Yard → D365 | ● |
 
-Nine carry live traffic; the five marked ○ exist so the landscape is complete and are drawn dashed
-on the map. Screens that measure agreement say "of 9 measured" rather than counting the quiet ones
-as healthy.
+Fifteen carry live traffic; the four marked ○ exist so the landscape is complete and are drawn
+dashed on the map. Screens that measure agreement count only the live ones rather than counting
+the quiet ones as healthy.
 
 ---
 
-## 6. The nine live checks
+## 6. The fourteen live checks
 
 `src/sim/checks.ts`. Each check is one business rule, a readable SQL string, a set of columns, and
 a `run()` that joins the live tables with `Map` indexes and returns failing rows **with a
@@ -346,15 +368,21 @@ plain-language cause**.
 | C3 | Every recycling load reached the scrap yard | `gate_pass` ↔ `receipt` | F4 |
 | C4 | Batch weights add up to the receipt | `receipt` ↔ `scrap_batch` | — |
 | C5 | Chemistry complete (Ni, Cr, Mo) for every batch | `scrap_batch` ↔ `chemistry` | F5 |
-| C6 | Stock posted in KG with the batch weight | `scrap_batch` ↔ `stock_posting` | F6 |
+| C6 | Stock in kilograms matches the tonnes received | `scrap_batch` ↔ `stock_posting` | F6 |
+| C6b | Issued kilograms never exceed stock | `stock_posting` ↔ `issue` | F6 |
 | C7 | Invoices pass the three-way match | `RBKP` | F1, F2, F7 |
-| C8 | Every posted invoice has its document copy | `RBKP` ↔ `output_document` | — |
+| C8 | Every booking has its document in Lasernet | `RBKP`, `stock_posting` ↔ `output_document` | — |
 | C9 | Mill confirmations arrive within 15 minutes | `heat` ↔ `AFRU` | F8 |
+| C10 | Every vendor paid was screened against today's sanctions list | `RBKP` ↔ `sanctions_screen` | F9 |
+| C11 | Every foreign-currency invoice used that day's exchange rate | `RBKP` ↔ `fx_rate` | F10 |
+| C12 | Transfers arrive with the same weight | `transfer` | F6 |
+| C13 | Every tested batch has a quality order with the right result | `chemistry` ↔ `quality_order` | F5 |
 
 **Settle times matter.** A check must never fail because a message has not landed yet, so each one
-ignores records younger than a settle window: 10–12 minutes for the gate interfaces, 25–50 for
-sortation and chemistry, 55 for mill confirmations. Those windows are above the maximum travel
-time of the relevant interface, including when the late-file fault is on.
+ignores records younger than a settle window: 10–12 minutes for the gate interfaces, 15–20 for the
+compliance and transfer checks, 25–50 for sortation and chemistry, 55 for mill confirmations. Those
+windows are above the maximum travel time of the relevant interface, including when the late-file
+fault is on.
 
 **Causes are derived, not guessed.** C1 decides between the two possible causes arithmetically:
 
@@ -364,8 +392,10 @@ else if |Δ − |tare − registered|| ≤ 20 → "Stale tare: the message used 
 else                                  → the generic difference
 ```
 
-C4 and C8 have no fault wired to them, so with all faults on the honest result is
-**2 of 9 checks pass** — the two nobody is breaking.
+C4 and C8 have no fault wired to them, and C10 and C11 are rare by design (3 % of screenings,
+10 % of days), so with every fault on the honest result is usually **4 or 5 of 14 checks pass**.
+With every fault off it is always **14 of 14**, and `npm run selftest` fails the build if it is
+not.
 
 ---
 
@@ -539,6 +569,16 @@ eleven pages, so the answer to "where does this come from" is identical everywhe
 
 ## 12. Page by page
 
+### Testing Journey (`/journey`)
+
+The whole testing process as eight steps, in order: learn the process, confirm it with key users,
+write the tests, make the test data, run them, check the data across systems, fix and re-test,
+prove and release. Each step shows what goes in → what the AI does → what comes out, who checks
+it, *today* against *with the factory*, the client requirements it covers (CORE-01…06 and
+ADV-01…04, each chip opening the screen that proves it), and a button into the screen where that
+step really happens. **Play the journey** walks all eight with a live log, and *Follow one truck
+through the journey* pins a real vehicle from the running plant and shows where it is.
+
 ### Command Centre · Health (`/`)
 
 The landing page, and the only one that has to work in the first ten seconds of a demo.
@@ -555,14 +595,17 @@ The landing page, and the only one that has to work in the first ten seconds of 
 - **Month-end readiness** — 10 days against a 3-day target, naming the one blocker.
 - **Workflow health** — all six processes with live volume, the checks covering them, open
   findings, and the stage strip.
+- **Projects** — the three change projects running at once, each with its scenarios, open findings
+  and schedules, plus **the next three runs** the factory will start on its own. Pressing one sets
+  the project filter the whole app follows.
 - **Findings** by severity with the top five listed, **requirements** with scenario counts, and the
   **run history**.
 
 ### Command Centre · Release & Close (`/release`)
 
-Gate decision (GO / CONDITIONAL / NO-GO) derived from **five computed exit criteria**: no critical
-finding, nine checks agree, regression green, evidence locked and signed, backlog zero at month-end
-volume. Each states why it failed and links to the proof. Plus the close calendar with five
+Gate decision (GO / CONDITIONAL / NO-GO) derived from **six computed exit criteria**: no critical
+finding, every live check agrees, regression green, evidence locked and signed, backlog zero at
+month-end volume, and every payment screened and priced correctly (C10 and C11). Each states why it failed and links to the proof. Plus the close calendar with five
 milestones, and a sign-off panel for the four roles.
 
 ### Command Centre · Month-End Load (`/load`)
@@ -578,10 +621,18 @@ Pick a release or individual changes, simulate, and get: a verdict, the **confid
 against the score if it shipped**, the systems changed and the systems downstream, the workflow
 stages hit, and one card per change with what stops and a timed recommendation.
 
+### Command Centre · Framework & Pod (`/offer`)
+
+What is being offered, rather than what the tool does: the framework in five steps (Learn → Build
+→ Run → Watch → Prove) with a **See it** button into the working screen for each, the pod roles,
+**what we commit to** (targets to agree, with today's value read live where the factory already
+measures it), **expected benefits** (illustrative before/after bars), how a pilot starts, and a
+tool-demo-against-pod comparison.
+
 ### Enterprise Map (`/landscape`)
 
-Ten systems in three bands, fourteen interfaces, live record counts, red borders where a check
-disagrees. A second view turns a plain-English rule into a query, runs it against live data and
+Ten systems and four outside finance services in three bands, nineteen interfaces, live record
+counts, red borders where a check disagrees. A second view turns a plain-English rule into a query, runs it against live data and
 shows the rows.
 
 ### Process Ontology (`/ontology`, `/ontology/agents`, `/coverage`)
@@ -591,9 +642,9 @@ tests, and the **live row count** for that stage's tables. An ontology graph vie
 stages → systems → data → agents. The Agents tab lists the eleven agents (reads → produces → works
 on). Coverage maps R1–R10 to the screens that prove them.
 
-### Process Discovery (`/discovery`)
+### Process Discovery (`/discovery`, `/discovery/map`, `/discovery/compare`)
 
-Alive before anything is pressed:
+Three tabs. **Inputs** is alive before anything is pressed:
 
 - a clickable diagram of three inputs → the agent's four steps → a process map
 - **the six recordings**, each with who recorded it, why it was requested, and what it showed, each
@@ -601,37 +652,70 @@ Alive before anything is pressed:
 - the **plant log**, which is the live event stream from the running simulation
 - the four SOPs in full
 
-After running: stages with their evidence, an activities table counted against live tables,
-**"what the procedure says against what the systems actually did"** (five written rules turned into
-queries and run), the clean-versus-rework split, and the two rework loops with their daily cost.
+**Process map** draws the discovered process as boxes left to right, every arrow carrying the
+number of cases that made that move in the last 24 hours, the clean path in green and the rework
+loops curving back underneath in red with what they cost in a day. Pressing any box, arrow or loop
+opens it and asks the key user whether it is right: **Correct**, **Not right** with a reason (wrong
+order · missing step · not a real step · wrong system · other) or a comment. The feedback list below
+shows every correction as Open, Applied or Dismissed; **Apply feedback** redraws the map as
+version 2 and the scenario writer then says which version it worked from. A compare toggle puts
+version 1 beside it with the corrections listed. The activities table and the rework loops live
+here too.
 
-### Test Studio (`/studio`, `/test-data`)
+**Procedure vs reality** turns the five written rules into queries and runs them against the live
+plant, with the clean-versus-rework split underneath.
+
+### Test Studio (`/studio`, `/test-data`, `/studio/master-data`, `/studio/record`)
 
 Generate scenarios from the ontology and the failing checks; they arrive Pending approval. Each
 scenario drawer shows business steps with the technical detail behind a toggle. Test Data generates
 linked records and loads them into the test environment.
 
+**Master Data Check** scans the master records behind the tests before they run: the vehicle master
+is compared live against the last weighings on the weighbridge, and anything more than 500 kg out
+is listed with the fix. Authored sample problems (a vendor with no VAT number, a closed purchase
+order still receiving, a duplicate vendor, a material with no grade window) are marked *sample*.
+Each row can have a **clean copy** prepared for the test environment or a **finding** raised.
+
+**Record** watches a key user do the work once: every click is captured with the screen it touched,
+including the pauses and the mis-clicks. **Turn into a test with AI** strips those out, swaps typed
+values for test-data placeholders, adds the checks the rule needs, and writes a scenario that lands
+in Scenarios as Pending approval.
+
 ### Live Data Flow (`/flow`, `/flow/data`, `/flow/checks`, `/flow/trace`)
 
-The heart of the demo. The map with moving dots, the eight fault switches with hit counts, the
-event feed, the raw tables per system, the nine checks with failing rows and causes — including
+The heart of the demo. The map with moving dots, the ten fault switches with hit counts, the
+event feed, the raw tables per system, the fourteen checks with failing rows and causes — including
 **Raise finding** and **Fix the cause and replay** — and Trace.
 
-### Run Centre (`/run`, `/evidence`)
+### Run Centre (`/run`, `/run/schedules`, `/evidence`)
 
 A live run, step by step, with the workflow strip lighting up: one step self-heals, one negative
 step is blocked as expected, one data check fails and raises F-001, and it ends CONDITIONAL with an
-evidence pack. Findings are filterable by severity. Evidence lists locked, hashed bundles.
+evidence pack. Every step keeps a drawn screenshot of the screen it touched and its own log lines,
+both of which go into the evidence pack. Findings are filterable by severity and follow the project
+filter. Evidence lists locked, hashed bundles.
+
+**Schedules** is what makes it a factory rather than a demo: five seeded schedules (nightly at
+02:00, after every SAP transport, after every D365 update, before the month-end close, weekly),
+each with what it runs, its project, its last result, its next run and an on/off switch. **Run now**
+starts a real run in the Run Centre, records the verdict against the schedule and sends the report
+to the people named on it, with a link to the run. **New schedule** adds one.
 
 ### Interface Testing (`/interfaces`)
 
-Totals (sent, received, matched, mismatched, missing, duplicated), the fourteen interfaces, and a
-field-by-field comparison of any message with *Follow the truck*.
+Totals (sent, received, matched, mismatched, missing, duplicated), the nineteen interfaces, and a
+field-by-field comparison of any message with *Follow the truck*. A filter bar narrows everything
+below it at once — the totals, the table, the records and *Follow the truck* — by search, source
+system, target system, business process, status (matched · mismatched · missing · duplicated),
+health, type (shop-floor · financial), format (IDoc · API · file), time window and *only live*.
+Active filters show as removable chips with *Clear all*, and the whole filter state is kept in the
+address bar so a filtered view can be shared as a link.
 
 ### Change & Regression (`/regression`, `/self-healing`, `/reconciliation`)
 
-Change feed with risk dials; each change told as *what changed → what could go wrong → what we do*
-plus a business line; where it lands in the workflows; regression before and after a baseline.
+Change feed with risk dials, following the project chosen in the header; each change told as
+*what changed → what could go wrong → what we do* plus a business line; where it lands in the workflows; regression before and after a baseline.
 Self-healing shows before/after diffs with confidence and an approval. Reconciliation shows source
 against target with differences explained.
 
@@ -654,14 +738,16 @@ Being straight about this in front of a client is worth more than pretending eve
 
 | Live — computed from the running simulation | Fixture — authored content |
 |---|---|
-| All 15 tables and every row in them | The 10 systems, 14 interfaces and 6 processes |
-| The nine checks, their rows and causes | The ~30 scenarios and their steps |
+| All 22 tables and every row in them | The 10 systems, 4 outside services, 19 interfaces and 6 processes |
+| The fourteen checks, their rows and causes | The ~30 scenarios and their steps |
 | Trace, end to end | The 6 changes, 7 healing events, 4 recon sets, SoD rules |
 | Interface totals and field comparisons | The 16 seeded findings (new ones are real) |
 | The confidence score and all four inputs | The six Discovery recordings and the four SOPs |
 | The release exit criteria | The 30-day trend (except today's point, which is live) |
-| Discovery's activity counts, procedure verdicts and rework split | The month-end load capacity model |
-| Record counts per system, interface and workflow | The six historic runs |
+| Discovery's activity counts, arrow counts, procedure verdicts and rework cost | The month-end load capacity model |
+| Record counts per system, interface and workflow | The six historic runs and the five seeded schedules |
+| The vehicle-master drift found by the Master Data Check | The four sample master-data problems, marked *sample* |
+| Today's values on Framework & Pod marked *live* | The illustrative before/after benefit bars |
 
 The AI output — scenario generation, discovery, impact analysis, self-healing — is pre-written
 content revealed through a live log. Every score and verdict is computed in code, never random.
@@ -677,15 +763,16 @@ Three gates, all runnable from the command line, all part of `npm run verify`.
 **`npm run selftest`** — runs the plant headlessly and prints both halves of the invariant:
 
 ```
-ALL FAULTS ON    2 of 9 checks pass · 538 records compared · 51 disagree
-ALL FAULTS OFF   9 of 9 checks pass · 542 records compared ·  0 disagree
+ALL FAULTS ON     4 of 14 checks pass · 881 records compared · 80 disagree
+ALL FAULTS OFF   14 of 14 checks pass · 892 records compared ·  0 disagree
 ```
 
 It exits non-zero if the clean run is not perfect, or if the faulty run looks too healthy. This is
 the proof that the failures come from the simulation rather than from fixtures.
 
-**`npm run smoke`** — renders all 32 views in jsdom with the real providers and the real live data,
-and fails if any throws. Case 1 renders drawer content specifically, to protect the provider order.
+**`npm run smoke`** — renders all 45 views in jsdom with the real providers and the real live data,
+and fails if any throws. The last six render the states a visitor only reaches after pressing
+something: the corrected process map, a chosen project, a filtered interface list. Case 1 renders drawer content specifically, to protect the provider order.
 
 ---
 
@@ -696,7 +783,7 @@ and fails if any throws. Case 1 renders drawer content specifically, to protect 
 | A menu item | One object in `src/app/nav.config.ts` plus a `<Route>` in `src/app/routes.tsx`. Sidebar, breadcrumb, palette, role guard and title follow automatically. |
 | A theme token | Add it to both blocks in `src/index.css` and to `tailwind.config.js`. |
 | A live check | A definition in `CHECK_DEFS` and a case in `runCheck` (`src/sim/checks.ts`). It appears on Live Checks, in the score and in the release criteria with no other change. |
-| A fault | An entry in `FAULTS` and a `this.fault('F9')` call where it should bite (`src/sim/engine.ts`). |
+| A fault | An entry in `FAULTS` and a `this.fault('F11')` call where it should bite (`src/sim/engine.ts`). |
 | A provenance strip | `<SourceNote reads={[…]} computes="…" feeds={[…]} steps={[…]} />` at the bottom of a card. |
 | A real backend | Replace `src/sim/engine.ts` with a client that fills the same tables and message list, and keep `subscribe`/`getVersion`. Checks, trace, scoring and every page work unchanged. |
 

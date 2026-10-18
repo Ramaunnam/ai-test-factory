@@ -39,6 +39,7 @@ import { runAllChecks, runCheck, checkSummary, type CheckResult } from '@/sim/ch
 import { useSim, useSimVersion } from '@/sim/useSim'
 import { trace, traceSuggestions } from '@/sim/trace'
 import { SYSTEMS, SYSTEM_TABLES_BY_SYSTEM, interfaceById } from '@/data/flowHelpers'
+import { useProjectFilter } from '@/data/projects'
 import { fmtSim, num } from '@/lib/format'
 import { useDrawer } from '@/providers/DrawerProvider'
 import { useToast } from '@/providers/ToastProvider'
@@ -370,6 +371,7 @@ export function SystemDataPage() {
   const version = useSimVersion()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const { withProject } = useProjectFilter()
   const [results, setResults] = useState<CheckResult[]>(() => runAllChecks())
 
   useEffect(() => {
@@ -434,7 +436,7 @@ export function SystemDataPage() {
             value={num(counts[s.id] ?? 0)}
             tone={failing[s.id] ? 'danger' : 'neutral'}
             hint={failing[s.id] ? `${failing[s.id]} failing records` : 'data agrees'}
-            onClick={() => setParams({ system: s.id })}
+            onClick={() => setParams(withProject({ system: s.id }))}
           />
         ))}
       </div>
@@ -446,7 +448,7 @@ export function SystemDataPage() {
           actions={
             <div className="flex flex-wrap gap-1.5">
               {tables.map((t) => (
-                <Chip key={t} selected={t === table} onClick={() => setParams({ system: system.id, table: t })}>
+                <Chip key={t} selected={t === table} onClick={() => setParams(withProject({ system: system.id, table: t }))}>
                   {t}
                 </Chip>
               ))}
@@ -751,6 +753,7 @@ export function LiveChecksPage() {
 export function TracePage() {
   const version = useSimVersion()
   const [params, setParams] = useSearchParams()
+  const { withProject } = useProjectFilter()
   const [results, setResults] = useState<CheckResult[]>(() => runAllChecks())
   const q = params.get('q') ?? ''
   const [input, setInput] = useState(q)
@@ -792,7 +795,7 @@ export function TracePage() {
             <span className="text-label font-semibold uppercase text-subtle">Failing</span>
             {suggestions.failing.length === 0 && <span className="text-xs text-success">nothing is failing right now</span>}
             {suggestions.failing.map((k) => (
-              <Chip key={k} tone="danger" onClick={() => setParams({ q: k })}>
+              <Chip key={k} tone="danger" onClick={() => setParams(withProject({ q: k }))}>
                 {k}
               </Chip>
             ))}
@@ -800,7 +803,7 @@ export function TracePage() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-label font-semibold uppercase text-subtle">Clean</span>
             {suggestions.clean.map((k) => (
-              <Chip key={k} onClick={() => setParams({ q: k })}>
+              <Chip key={k} onClick={() => setParams(withProject({ q: k }))}>
                 {k}
               </Chip>
             ))}
