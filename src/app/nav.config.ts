@@ -140,6 +140,7 @@ export const NAV: NavItem[] = [
     blurb: 'Run scenarios step by step and keep the evidence',
     tabs: [
       { label: 'Runs', path: '/run' },
+      { label: 'Schedules', path: '/run/schedules' },
       { label: 'Evidence & Reports', path: '/evidence' },
     ],
   },

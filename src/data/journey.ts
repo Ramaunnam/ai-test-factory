@@ -191,7 +191,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
     n: 5,
     name: 'Run the tests',
     goesIn: 'Approved scenarios and test data.',
-    aiDoes: 'Runs every step, and heals a step when a screen or field changed.',
+    aiDoes: 'Runs every step, and heals a step when a screen or field changed. Runs on a schedule, after every change, for every project.',
     comesOut: 'Pass, fail or blocked-as-expected per step, each step with a screenshot and log.',
     checkedBy: 'QA Lead',
     requirements: [

@@ -103,6 +103,7 @@ const CASES: Case[] = [
   ['Live Data Flow / Live Checks', '/flow/checks', '/flow/checks', flow.LiveChecksPage],
   ['Live Data Flow / Trace', '/flow/trace', '/flow/trace', flow.TracePage],
   ['Run Centre / Runs', '/run', '/run', run.RunCentrePage],
+  ['Run Centre / Schedules', '/run/schedules', '/run/schedules', run.SchedulesPage],
   ['Run Centre / Evidence', '/evidence', '/evidence', run.EvidencePage],
   ['Interface Testing', '/interfaces', '/interfaces', interfaces.InterfacesPage],
   ['Interface Testing (one)', '/interfaces', '/interfaces?interface=IF-01', interfaces.InterfacesPage],

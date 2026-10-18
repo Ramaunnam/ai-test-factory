@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Check, ChevronDown, HelpCircle, Menu, Monitor, Moon, Search, Sun, UserCog } from 'lucide-react'
+import { Check, ChevronDown, FolderGit2, HelpCircle, Menu, Monitor, Moon, Search, Sun, UserCog } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Badge, IconButton, SegmentedControl } from '@/components/ui'
 import { useTheme, type ThemeMode } from '@/providers/ThemeProvider'
 import { ROLES, useRole } from '@/providers/RoleProvider'
+import { ALL_PROJECTS, PROJECTS, useProjectFilter } from '@/data/projects'
 import { useToast } from '@/providers/ToastProvider'
 import { locate } from './nav.config'
 
@@ -24,13 +25,19 @@ export function Header({
   const toast = useToast()
   const [roleOpen, setRoleOpen] = useState(false)
   const roleRef = useRef<HTMLDivElement>(null)
+  const [projectOpen, setProjectOpen] = useState(false)
+  const projectRef = useRef<HTMLDivElement>(null)
+  const { projectId, project, setProject } = useProjectFilter()
 
   const here = locate(pathname)
   const group = here?.item.group ?? 'OVERVIEW'
   const page = here?.item.label ?? 'Report'
   const tab = here?.tab?.label
 
-  useEffect(() => setRoleOpen(false), [pathname])
+  useEffect(() => {
+    setRoleOpen(false)
+    setProjectOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     if (!roleOpen) return
@@ -47,6 +54,22 @@ export function Header({
       document.removeEventListener('keydown', onKey)
     }
   }, [roleOpen])
+
+  useEffect(() => {
+    if (!projectOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!projectRef.current?.contains(e.target as Node)) setProjectOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setProjectOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [projectOpen])
 
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur no-print">
@@ -100,6 +123,84 @@ export function Header({
       <Badge tone="warning" className="hidden sm:inline-flex" title="Simulated environment, no production data">
         TEST
       </Badge>
+
+      <div className="relative" ref={projectRef}>
+        <button
+          type="button"
+          onClick={() => setProjectOpen((o) => !o)}
+          aria-expanded={projectOpen}
+          aria-haspopup="menu"
+          title="Which change project you are looking at"
+          className="flex h-[34px] items-center gap-2 rounded-md border border-line bg-surface px-2.5 text-sm text-text transition-colors hover:bg-surface2"
+        >
+          <FolderGit2 size={15} className={cn(project ? 'text-primary' : 'text-subtle')} />
+          <span className="hidden max-w-[130px] truncate lg:block">{project ? project.name : 'All projects'}</span>
+          <ChevronDown size={14} className={cn('text-subtle transition-transform', projectOpen && 'rotate-180')} />
+        </button>
+        {projectOpen && (
+          <div
+            role="menu"
+            className="absolute right-0 top-[38px] z-[80] w-[320px] overflow-hidden rounded-lg border border-line bg-surface shadow-lg animate-scaleIn"
+          >
+            <div className="border-b border-line px-3 py-2 text-label font-semibold uppercase text-subtle">
+              Change project
+            </div>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setProject(ALL_PROJECTS)
+                setProjectOpen(false)
+                toast({ title: 'Showing every project', tone: 'info' })
+              }}
+              className={cn(
+                'flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-surface2',
+                projectId === ALL_PROJECTS && 'bg-primary-soft/60',
+              )}
+            >
+              <Check
+                size={15}
+                className={cn('mt-0.5 shrink-0', projectId === ALL_PROJECTS ? 'text-primary' : 'text-transparent')}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-text">All projects</span>
+                <span className="block text-xs text-muted">
+                  Everything running at once, which is how the landscape really is.
+                </span>
+              </span>
+            </button>
+            {PROJECTS.map((pr) => (
+              <button
+                key={pr.id}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setProject(pr.id)
+                  setProjectOpen(false)
+                  toast({
+                    title: `Showing ${pr.name}`,
+                    description: 'Scenarios, runs, changes, findings and schedules are filtered to this project.',
+                    tone: 'info',
+                  })
+                }}
+                className={cn(
+                  'flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-surface2',
+                  pr.id === projectId && 'bg-primary-soft/60',
+                )}
+              >
+                <Check size={15} className={cn('mt-0.5 shrink-0', pr.id === projectId ? 'text-primary' : 'text-transparent')} />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-text">{pr.name}</span>
+                  <span className="block text-xs text-muted">{pr.blurb}</span>
+                  <span className="mt-0.5 block font-mono text-[11px] text-subtle">
+                    {pr.release} · owned by {pr.owner}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="relative" ref={roleRef}>
         <button

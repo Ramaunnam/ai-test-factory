@@ -30,6 +30,7 @@ import { HealthLegend } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { PROCESSES, REQUIREMENTS, RUNS, SCENARIOS, TREND_30_DAYS, type StageHealth } from '@/data'
 import { useStore } from '@/data/appStore'
+import { ALL_PROJECTS, PROJECTS, projectOfSystem, projectOfSystems, useProjectFilter } from '@/data/projects'
 import { useChecks, useSim } from '@/sim/useSim'
 import { confidence } from '@/lib/score'
 import { useConfidenceInput, scoreIf } from '@/lib/useConfidenceInput'
@@ -154,6 +155,12 @@ export function HealthPage() {
     return list.sort((a, b) => b.gain - a.gain).slice(0, 4)
   }, [input, conf.score, criticals, failingChecks, checks, ifStats, store.findings])
 
+  const projectFilter = useProjectFilter()
+  const nextRuns = [...store.schedules]
+    .filter((s) => s.on && (s.project === ALL_PROJECTS || projectFilter.matches(s.project)))
+    .sort((a, b) => a.nextInMinutes - b.nextInMinutes)
+    .slice(0, 3)
+
   return (
     <>
       <PageHeader
@@ -174,6 +181,87 @@ export function HealthPage() {
           </>
         }
       />
+
+      {/* ---------------------------------------------------------------- */}
+      {/* the projects running at the same time                              */}
+      {/* ---------------------------------------------------------------- */}
+      <Card className="mb-4">
+        <CardHeader
+          title="Projects"
+          subtitle="Three change projects are running at once. Pick one in the header and the whole factory follows it."
+          actions={
+            <Badge tone={projectFilter.project ? 'info' : 'neutral'}>
+              {projectFilter.project ? projectFilter.project.name : 'All projects'}
+            </Badge>
+          }
+        />
+        <CardBody className="grid gap-3 lg:grid-cols-3">
+          {PROJECTS.map((p) => {
+            const scenarios = SCENARIOS.filter((s) => projectOfSystems(s.systems) === p.id).length
+            const open = store.findings.filter((f) => f.status !== 'Closed' && projectOfSystem(f.system) === p.id)
+            const criticalsHere = open.filter((f) => f.severity === 'Critical').length
+            const schedules = store.schedules.filter((s) => s.project === p.id && s.on).length
+            const selected = projectFilter.projectId === p.id
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => projectFilter.setProject(selected ? ALL_PROJECTS : p.id)}
+                className={cn(
+                  'rounded-md border px-3 py-2.5 text-left transition-colors',
+                  selected ? 'border-primary bg-primary-soft/50' : 'border-line hover:bg-surface2',
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-text">{p.name}</span>
+                  <Badge tone={criticalsHere ? 'danger' : open.length ? 'warning' : 'success'} className="ml-auto">
+                    {criticalsHere ? `${criticalsHere} critical` : open.length ? `${open.length} open` : 'clean'}
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-muted">{p.blurb}</p>
+                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-subtle">
+                  <span>{num(scenarios)} scenarios</span>
+                  <span>{num(schedules)} schedules on</span>
+                  <span>{p.release}</span>
+                </div>
+              </button>
+            )
+          })}
+        </CardBody>
+        <CardBody className="border-t border-line pt-3">
+          <div className="mb-2 text-label font-semibold uppercase text-subtle">The next three runs</div>
+          <div className="grid gap-2 lg:grid-cols-3">
+            {nextRuns.length === 0 ? (
+              <p className="text-sm text-muted">Every schedule is switched off, so nothing will run on its own.</p>
+            ) : (
+              nextRuns.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => navigate('/run/schedules')}
+                  className="rounded-md border border-line px-3 py-2 text-left transition-colors hover:bg-surface2"
+                >
+                  <div className="text-xs font-medium text-text">{s.name}</div>
+                  <div className="truncate text-[11px] text-muted">{s.what}</div>
+                  <div className="mt-0.5 font-mono text-[11px] text-subtle">{s.nextRun}</div>
+                </button>
+              ))
+            )}
+          </div>
+        </CardBody>
+        <SourceNote
+          title="Where the project split comes from"
+          reads={[
+            { label: 'Projects', note: 'the systems each change project owns' },
+            { label: 'Scenarios, findings and schedules', route: '/studio' },
+          ]}
+          computes="everything is assigned to the project that owns the system it lands in, so one project can be looked at on its own"
+          feeds={[
+            { label: 'Run Centre \u2192 Schedules', route: '/run/schedules' },
+            { label: 'Change & Regression', route: '/regression' },
+          ]}
+        />
+      </Card>
 
       {/* ---------------------------------------------------------------- */}
       {/* the plant, live                                                    */}

@@ -40,6 +40,7 @@ const LiveChecksPage = page(flow, 'LiveChecksPage')
 const TracePage = page(flow, 'TracePage')
 const RunCentrePage = page(run, 'RunCentrePage')
 const EvidencePage = page(run, 'EvidencePage')
+const SchedulesPage = page(run, 'SchedulesPage')
 const InterfacesPage = page(() => import('@/pages/Interfaces'), 'InterfacesPage')
 const ChangeImpactPage = page(regression, 'ChangeImpactPage')
 const SelfHealingPage = page(regression, 'SelfHealingPage')
@@ -79,6 +80,7 @@ export function AppRoutes() {
         <Route path="/flow/checks" element={<LiveChecksPage />} />
         <Route path="/flow/trace" element={<TracePage />} />
         <Route path="/run" element={<RunCentrePage />} />
+        <Route path="/run/schedules" element={<SchedulesPage />} />
         <Route path="/evidence" element={<EvidencePage />} />
         <Route path="/interfaces" element={<InterfacesPage />} />
         <Route path="/regression" element={<ChangeImpactPage />} />

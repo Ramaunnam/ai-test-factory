@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { HEALING, SCENARIOS, SYSTEMS, type Scenario } from './index'
 import { SEED_RECORDINGS, type Recording, type RecordingStatus } from './recordings'
 import type { FeedbackStatus, ProcessFeedback } from './processMap'
+import { SEED_SCHEDULES, type Schedule, type ScheduleResult } from './schedules'
 
 export interface Finding {
   id: string
@@ -64,6 +65,9 @@ interface State {
   discoveryRun: boolean
   processFeedback: ProcessFeedback[]
   mapVersion: 1 | 2
+  schedules: Schedule[]
+  /** The reports a schedule has sent, newest first. */
+  sentReports: { id: string; schedule: string; runId: string; sentTo: string[]; sentAt: string }[]
   recordings: Recording[]
   recordedScenarios: Scenario[]
   approvals: ApprovalItem[]
@@ -178,6 +182,8 @@ class AppStore {
     discoveryRun: false,
     processFeedback: SEED_FEEDBACK,
     mapVersion: 1,
+    schedules: SEED_SCHEDULES,
+    sentReports: [],
     recordings: SEED_RECORDINGS,
     recordedScenarios: [],
     approvals: SEED_APPROVALS,
@@ -246,6 +252,40 @@ class AppStore {
     this.commit((s) => {
       s.processFeedback = s.processFeedback.map((f) => (f.status === 'Open' ? { ...f, status: 'Applied' } : f))
       s.mapVersion = 2
+    })
+  }
+
+  toggleSchedule(id: string) {
+    this.commit((s) => {
+      s.schedules = s.schedules.map((x) => (x.id === id ? { ...x, on: !x.on } : x))
+    })
+  }
+
+  addSchedule(input: Omit<Schedule, 'id'>) {
+    const id = `SCH-${String(this.state.schedules.length + 1).padStart(2, '0')}`
+    this.commit((s) => {
+      s.schedules = [...s.schedules, { ...input, id }]
+    })
+    return id
+  }
+
+  /** A schedule has just run: keep its result and the report it sent. */
+  recordScheduleRun(id: string, runId: string, result: ScheduleResult, when: string) {
+    const schedule = this.state.schedules.find((s) => s.id === id)
+    this.commit((s) => {
+      s.schedules = s.schedules.map((x) =>
+        x.id === id ? { ...x, lastResult: result, lastRun: when, lastRunId: runId } : x,
+      )
+      s.sentReports = [
+        {
+          id: `RP-${String(s.sentReports.length + 1).padStart(3, '0')}`,
+          schedule: schedule?.name ?? id,
+          runId,
+          sentTo: schedule?.recipients ?? ['Key User', 'QA Lead'],
+          sentAt: when,
+        },
+        ...s.sentReports,
+      ]
     })
   }
 

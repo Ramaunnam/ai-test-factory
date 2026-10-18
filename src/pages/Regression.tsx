@@ -11,6 +11,7 @@ import {
   Chip,
   CodeBlock,
   DataTable,
+  EmptyState,
   Disclosure,
   LiveLog,
   Progress,
@@ -28,6 +29,7 @@ import { engine } from '@/sim/engine'
 import { useSimVersion } from '@/sim/useSim'
 import { useDrawer } from '@/providers/DrawerProvider'
 import { store, useStore } from '@/data/appStore'
+import { ALL_PROJECTS, projectOfSystem, useProjectFilter } from '@/data/projects'
 import { useToast } from '@/providers/ToastProvider'
 import { useRole } from '@/providers/RoleProvider'
 import { fmtSim, num } from '@/lib/format'
@@ -49,7 +51,9 @@ export function ChangeImpactPage() {
   const [baseline, setBaseline] = useState(RUNS[1].id)
   const [phase, setPhase] = useState<'idle' | 'running' | 'done'>('idle')
 
-  const changeId = params.get('change') ?? CHANGES[0].id
+  const { project, matches, setProject } = useProjectFilter()
+  const visibleChanges = CHANGES.filter((c) => matches(projectOfSystem(c.system)))
+  const changeId = params.get('change') ?? (visibleChanges[0] ?? CHANGES[0]).id
   const change = CHANGES.find((c) => c.id === changeId) ?? CHANGES[0]
 
   const marks = useMemo(() => {
@@ -98,13 +102,30 @@ export function ChangeImpactPage() {
       <JourneyBar step={7} />
       <PageHeader
         title="Change & Regression"
-        subtitle="Six changes are in flight. For each one: what changed, what could go wrong, and what we do about it."
+        subtitle="For each change in flight: what changed, what could go wrong, and what we do about it."
         tabs={TABS}
       />
 
-      <SectionTitle title="Change feed" hint="Six changes in flight across two releases, highest risk first." />
+      <SectionTitle
+        title="Change feed"
+        hint={
+          project
+            ? `${visibleChanges.length} of ${CHANGES.length} changes belong to ${project.name}, highest risk first.`
+            : `${CHANGES.length} changes in flight across two releases, highest risk first.`
+        }
+        actions={project ? <Badge tone="info">{project.name}</Badge> : undefined}
+      />
+      {visibleChanges.length === 0 && (
+        <Card className="mb-4">
+          <EmptyState
+            title="No change in flight for this project"
+            description="Nothing is currently changing in the systems this project owns. Look at every project to see the rest."
+            action={<Button onClick={() => setProject(ALL_PROJECTS)}>Show all projects</Button>}
+          />
+        </Card>
+      )}
       <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {[...CHANGES]
+        {[...visibleChanges]
           .sort((a, b) => b.risk - a.risk)
           .map((c) => (
             <Card

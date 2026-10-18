@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  CalendarClock,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -8,6 +9,7 @@ import {
   FileLock2,
   Loader2,
   Play,
+  Send,
   ShieldCheck,
   Sparkles,
   XCircle,
@@ -23,9 +25,13 @@ import {
   DataTable,
   Disclosure,
   CodeBlock,
+  EmptyState,
+  Input,
   Modal,
   SectionTitle,
+  Select,
   StatTile,
+  Switch,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
 import { JourneyBar } from '@/components/domain/JourneyBar'
@@ -35,6 +41,8 @@ import { PROCESSES, RUNS, SCENARIOS } from '@/data'
 import { RUN_STEPS as DEMO_STEPS } from '@/data/runSteps'
 import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { store, useStore } from '@/data/appStore'
+import { ALL_PROJECTS, PROJECTS, projectById, projectOfProcess, projectOfSystems, useProjectFilter } from '@/data/projects'
+import { SCHEDULE_WHEN, type ScheduleWhen } from '@/data/schedules'
 import { useToast } from '@/providers/ToastProvider'
 import { useRole } from '@/providers/RoleProvider'
 import { verdictOf } from '@/lib/score'
@@ -42,6 +50,7 @@ import { num } from '@/lib/format'
 
 const TABS = [
   { label: 'Runs', path: '/run' },
+  { label: 'Schedules', path: '/run/schedules' },
   { label: 'Evidence & Reports', path: '/evidence' },
 ]
 
@@ -61,10 +70,12 @@ export function RunCentrePage() {
   const [runId, setRunId] = useState<string | null>(null)
   const [shot, setShot] = useState<number | null>(null)
   const findingRaised = useRef(false)
+  const scheduleRef = useRef<string | null>(null)
+  const { matches } = useProjectFilter()
 
   const filtered = SCENARIOS.filter(
     (s) => s.process === processFilter && (typeFilter === 'All' || s.type === typeFilter),
-  )
+  ).filter((s) => matches(projectOfSystems(s.systems)))
 
   const start = () => {
     if (def.readOnly) {
@@ -83,10 +94,14 @@ export function RunCentrePage() {
 
   useEffect(() => {
     const demo = params.get('demo')
-    if (demo) {
-      setParams({}, { replace: true })
-      start()
-    }
+    const schedule = params.get('schedule')
+    if (!demo && !schedule) return
+    scheduleRef.current = schedule
+    const next = new URLSearchParams(params)
+    next.delete('demo')
+    next.delete('schedule')
+    setParams(next, { replace: true })
+    start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params])
 
@@ -130,10 +145,13 @@ export function RunCentrePage() {
   useEffect(() => {
     if (!done || !runId) return
     if (appState.runs.some((r) => r.id === runId)) return
+    const startedBy = scheduleRef.current
+    const schedule = startedBy ? appState.schedules.find((x) => x.id === startedBy) : undefined
+    const when = new Date().toLocaleString('en-GB')
     store.addRun({
       id: runId,
-      when: new Date().toLocaleString('en-GB'),
-      trigger: 'Key user on demand',
+      when,
+      trigger: schedule ? `${schedule.name} (scheduled)` : 'Key user on demand',
       scenarios: new Set(DEMO_STEPS.map((s) => s.scenario)).size,
       passed,
       failed,
@@ -143,6 +161,16 @@ export function RunCentrePage() {
       process: 'P1',
       live: true,
     })
+    if (schedule) {
+      store.recordScheduleRun(schedule.id, runId, verdict, when)
+      scheduleRef.current = null
+      toast({
+        title: `Report sent to ${schedule.recipients.join(' and ')}`,
+        description: `${schedule.name} ended ${verdict}.`,
+        tone: verdict === 'FAIL' ? 'danger' : 'info',
+        action: { label: 'Open the report', onClick: () => navigate(`/report/${runId}`) },
+      })
+    }
     toast({
       title: `Run ${runId} finished · ${verdict}`,
       description: `${passed} passed, ${failed} failed, ${healed} healed.`,
@@ -526,8 +554,9 @@ export function RunCentrePage() {
 
 export function EvidencePage() {
   const navigate = useNavigate()
+  const { matches } = useProjectFilter()
   const appState = useStore()
-  const allRuns = [...appState.runs, ...RUNS]
+  const allRuns = [...appState.runs, ...RUNS].filter((r) => matches(projectOfProcess(r.process)))
 
   return (
     <>
@@ -599,6 +628,370 @@ export function EvidencePage() {
           </p>
         </CardBody>
       </Card>
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Schedules                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export function SchedulesPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const { def } = useRole()
+  const appState = useStore()
+  const { projectId, project, setProject, matches } = useProjectFilter()
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({
+    name: '',
+    what: '',
+    when: SCHEDULE_WHEN[0] as ScheduleWhen,
+    project: ALL_PROJECTS,
+    scenarios: 8,
+  })
+
+  const schedules = appState.schedules.filter((s) =>
+    s.project === ALL_PROJECTS ? true : matches(s.project),
+  )
+  const on = schedules.filter((s) => s.on)
+  const next = [...on].sort((a, b) => a.nextInMinutes - b.nextInMinutes).slice(0, 3)
+  const failing = schedules.filter((s) => s.lastResult === 'FAIL').length
+
+  const runNow = (id: string) => {
+    if (def.readOnly) {
+      toast({
+        title: 'This view is read only',
+        description: `${def.id} can watch runs but not start them. Switch to Key User or QA Lead to run.`,
+        tone: 'info',
+      })
+      return
+    }
+    const params = new URLSearchParams()
+    params.set('schedule', id)
+    if (projectId !== ALL_PROJECTS) params.set('project', projectId)
+    navigate(`/run?${params.toString()}`)
+  }
+
+  const save = () => {
+    if (!form.name.trim()) return
+    const id = store.addSchedule({
+      name: form.name.trim(),
+      what: form.what.trim() || 'Every approved scenario in the project',
+      when: form.when,
+      project: form.project,
+      scenarios: Math.max(1, Number(form.scenarios) || 1),
+      lastResult: 'Not run yet',
+      lastRun: '—',
+      nextRun: form.when === 'Nightly at 02:00' ? '18 Oct 2026 02:00' : `On the next ${form.when.toLowerCase()}`,
+      nextInMinutes: 20 * 60,
+      on: true,
+      recipients: ['Key User', 'QA Lead'],
+    })
+    setAdding(false)
+    setForm({ name: '', what: '', when: SCHEDULE_WHEN[0], project: ALL_PROJECTS, scenarios: 8 })
+    toast({
+      title: `${id} created and switched on`,
+      description: 'It will run at the next trigger, and the report goes to Key User and QA Lead.',
+      tone: 'success',
+    })
+  }
+
+  return (
+    <>
+      <JourneyBar step={5} />
+      <PageHeader
+        title="Run Centre"
+        subtitle="Tests do not wait to be asked. They run on a schedule, after every change, for every project."
+        tabs={TABS}
+        actions={
+          <Button variant="primary" leftIcon={<CalendarClock size={15} />} onClick={() => setAdding(true)}>
+            New schedule
+          </Button>
+        }
+      />
+
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          label="Schedules switched on"
+          value={num(on.length)}
+          hint={`of ${num(schedules.length)} in ${project ? project.name : 'all projects'}`}
+        />
+        <StatTile
+          label="Next run"
+          value={next[0]?.nextRun ?? '—'}
+          tone="info"
+          hint={next[0]?.name ?? 'nothing scheduled'}
+        />
+        <StatTile
+          label="Failing last time"
+          value={num(failing)}
+          tone={failing ? 'danger' : 'success'}
+          hint={failing ? 'look at these first' : 'every schedule ended clean'}
+        />
+        <StatTile
+          label="Reports sent"
+          value={num(appState.sentReports.length)}
+          tone={appState.sentReports.length ? 'info' : 'neutral'}
+          hint="to the key user and the QA lead"
+        />
+      </div>
+
+      <Card className="mb-4">
+        <CardHeader
+          title="Schedules"
+          subtitle="What runs, when it runs, and who owns it."
+          actions={
+            project ? (
+              <Badge tone="info">{project.name}</Badge>
+            ) : (
+              <Badge tone="neutral">All projects</Badge>
+            )
+          }
+        />
+        {schedules.length === 0 ? (
+          <EmptyState
+            icon={<CalendarClock size={28} />}
+            title="No schedule for this project yet"
+            description="Nothing runs on its own for this project. Create a schedule, or look at every project at once."
+            action={
+              <span className="flex flex-wrap gap-2">
+                <Button variant="primary" onClick={() => setAdding(true)}>
+                  New schedule
+                </Button>
+                <Button onClick={() => setProject(ALL_PROJECTS)}>Show all projects</Button>
+              </span>
+            }
+          />
+        ) : (
+          <DataTable
+            rows={schedules}
+            rowKey={(s) => s.id}
+            rowTone={(s) => (s.lastResult === 'FAIL' ? 'danger' : s.lastResult === 'CONDITIONAL' ? 'warning' : undefined)}
+            columns={[
+              { key: 'id', header: 'ID', mono: true, width: 80 },
+              { key: 'name', header: 'Schedule', width: 190 },
+              { key: 'what', header: 'What it runs' },
+              { key: 'when', header: 'When', width: 200 },
+              {
+                key: 'project',
+                header: 'Project',
+                width: 170,
+                render: (s) => (
+                  <Badge tone={s.project === ALL_PROJECTS ? 'neutral' : 'primary'}>
+                    {s.project === ALL_PROJECTS ? 'All projects' : projectById(s.project)?.name ?? s.project}
+                  </Badge>
+                ),
+              },
+              { key: 'scenarios', header: 'Scenarios', align: 'right', mono: true, width: 100 },
+              {
+                key: 'lastResult',
+                header: 'Last result',
+                width: 130,
+                render: (s) =>
+                  s.lastRunId ? (
+                    <button
+                      type="button"
+                      className="rounded-sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/report/${s.lastRunId}`)
+                      }}
+                    >
+                      <Badge
+                        tone={
+                          s.lastResult === 'PASS'
+                            ? 'success'
+                            : s.lastResult === 'FAIL'
+                              ? 'danger'
+                              : s.lastResult === 'CONDITIONAL'
+                                ? 'warning'
+                                : 'neutral'
+                        }
+                      >
+                        {s.lastResult}
+                      </Badge>
+                    </button>
+                  ) : (
+                    <Badge tone="neutral">{s.lastResult}</Badge>
+                  ),
+              },
+              { key: 'lastRun', header: 'Last run', width: 150 },
+              { key: 'nextRun', header: 'Next run', width: 190 },
+              {
+                key: 'on',
+                header: 'On',
+                width: 110,
+                sortable: false,
+                render: (s) => (
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <Switch
+                      checked={s.on}
+                      size="sm"
+                      onChange={() => {
+                        store.toggleSchedule(s.id)
+                        toast({
+                          title: `${s.name} switched ${s.on ? 'off' : 'on'}`,
+                          description: s.on ? 'It will not run again until it is switched back on.' : `Next run: ${s.nextRun}.`,
+                          tone: s.on ? 'warning' : 'success',
+                        })
+                      }}
+                      label=""
+                    />
+                  </span>
+                ),
+                value: (s) => (s.on ? 1 : 0),
+              },
+              {
+                key: 'actions',
+                header: '',
+                sortable: false,
+                width: 110,
+                render: (s) => (
+                  <Button
+                    size="sm"
+                    leftIcon={<Play size={13} />}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      runNow(s.id)
+                    }}
+                  >
+                    Run now
+                  </Button>
+                ),
+              },
+            ]}
+            empty="No schedule matches this project."
+          />
+        )}
+        <SourceNote
+          title="How a schedule turns into a run"
+          reads={[
+            { label: 'Schedules on this page', note: 'what to run and when' },
+            { label: 'Approved scenarios', route: '/studio', note: 'only approved scenarios are ever run' },
+          ]}
+          computes="starts the run at the trigger, keeps the verdict, and sends the report to the people named on the schedule"
+          feeds={[
+            { label: 'Run Centre', route: '/run' },
+            { label: 'Evidence & Reports', route: '/evidence' },
+            { label: 'Command Centre', route: '/' },
+          ]}
+          steps={[
+            'A trigger fires: the clock, a SAP transport, a D365 update or the month-end close.',
+            'The scenarios approved for that project are run in the same order every time.',
+            'The verdict is kept against the schedule, and the run appears in Evidence & Reports.',
+            'The report is sent to the people named on the schedule, with a link to the run.',
+          ]}
+        />
+      </Card>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Next three runs" subtitle="What the factory will do on its own, without anyone asking." />
+          <CardBody className="space-y-2">
+            {next.length === 0 ? (
+              <p className="text-sm text-muted">Nothing is switched on, so nothing will run on its own.</p>
+            ) : (
+              next.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => runNow(s.id)}
+                  className="flex w-full flex-wrap items-center gap-2 rounded-md border border-line px-3 py-2 text-left transition-colors hover:bg-surface2"
+                >
+                  <CalendarClock size={14} className="text-primary" />
+                  <span className="text-sm font-medium text-text">{s.name}</span>
+                  <span className="text-xs text-muted">{s.what}</span>
+                  <span className="ml-auto font-mono text-[11px] text-subtle">{s.nextRun}</span>
+                </button>
+              ))
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader title="Reports sent" subtitle="Every scheduled run sends its report to the people who own it." />
+          {appState.sentReports.length === 0 ? (
+            <EmptyState
+              icon={<Send size={26} />}
+              title="No report has been sent in this session"
+              description="Press Run now on a schedule. When the run finishes the report is sent to the people named on it, and the link appears here."
+            />
+          ) : (
+            <DataTable
+              rows={appState.sentReports}
+              rowKey={(r) => r.id}
+              onRowClick={(r) => navigate(`/report/${r.runId}`)}
+              columns={[
+                { key: 'id', header: 'Report', mono: true, width: 90 },
+                { key: 'schedule', header: 'Schedule' },
+                { key: 'runId', header: 'Run', mono: true, width: 110 },
+                { key: 'sentTo', header: 'Sent to', render: (r) => r.sentTo.join(', '), width: 170 },
+                { key: 'sentAt', header: 'Sent', width: 160 },
+              ]}
+              empty="No report sent yet."
+            />
+          )}
+        </Card>
+      </div>
+
+      <Modal open={adding} onClose={() => setAdding(false)} title="New schedule" subtitle="It starts switched on.">
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-label font-semibold uppercase text-subtle">Name</label>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Nightly recycling check"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-label font-semibold uppercase text-subtle">What it runs</label>
+            <Input
+              value={form.what}
+              onChange={(e) => setForm((f) => ({ ...f, what: e.target.value }))}
+              placeholder="Scrap to stock, end to end"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-label font-semibold uppercase text-subtle">When</label>
+              <Select value={form.when} onChange={(e) => setForm((f) => ({ ...f, when: e.target.value as ScheduleWhen }))}>
+                {SCHEDULE_WHEN.map((w) => (
+                  <option key={w}>{w}</option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-label font-semibold uppercase text-subtle">Project</label>
+              <Select value={form.project} onChange={(e) => setForm((f) => ({ ...f, project: e.target.value }))}>
+                <option value={ALL_PROJECTS}>All projects</option>
+                {PROJECTS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-label font-semibold uppercase text-subtle">Scenarios</label>
+            <Input
+              type="number"
+              min={1}
+              value={form.scenarios}
+              onChange={(e) => setForm((f) => ({ ...f, scenarios: Number(e.target.value) }))}
+            />
+          </div>
+          <p className="text-xs text-muted">The report goes to the Key User and the QA Lead.</p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button onClick={() => setAdding(false)}>Cancel</Button>
+            <Button variant="primary" disabled={!form.name.trim()} onClick={save}>
+              Create the schedule
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   )
 }
