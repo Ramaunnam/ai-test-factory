@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeftRight,
@@ -50,11 +50,11 @@ import { SourceNote } from '@/components/domain/SourceNote'
 import { TABLE_LABEL, tableCount, tableRoute } from '@/lib/live'
 import {
   BUSINESS_OBJECTS,
-  OBJECT_BANDS,
   OBJECT_LINKS,
   neighboursOf,
   objectById,
   type BusinessObject,
+  type ObjLink,
   type ObjStatus,
 } from '@/data/objects'
 import { engine } from '@/sim/engine'
@@ -455,12 +455,36 @@ const OBJECT_ICONS: Record<string, LucideIcon> = {
   Layers,
 }
 
+/** Confirmed is green, anything still open is amber. */
+function statusTone(status: ObjStatus): 'success' | 'warning' {
+  return status === 'Confirmed' ? 'success' : 'warning'
+}
+
 function StatusDot({ status }: { status: ObjStatus }) {
   return (
     <span
       title={status}
-      className={cn('inline-block h-2 w-2 shrink-0 rounded-full', status === 'Confirmed' ? 'bg-success' : 'bg-accent')}
+      className={cn('inline-block h-1.5 w-1.5 shrink-0 rounded-full', status === 'Confirmed' ? 'bg-success' : 'bg-accent')}
     />
+  )
+}
+
+/** The small all-caps heading the panel is divided up with. */
+function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('text-label font-semibold uppercase tracking-wider text-subtle', className)}>{children}</div>
+  )
+}
+
+/** A chip that reads as a thing you could press in the real ontology manager. */
+function MetaChip({ children, title }: { children: ReactNode; title?: string }) {
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center rounded border border-line px-1.5 py-0.5 text-[11px] text-muted"
+    >
+      {children}
+    </span>
   )
 }
 
@@ -494,7 +518,7 @@ export function BusinessObjectsPage() {
     return wanted && objectById(wanted) ? wanted : BUSINESS_OBJECTS[0].id
   })
   const object = objectById(selectedId) ?? BUSINESS_OBJECTS[0]
-  const toConfirm = BUSINESS_OBJECTS.filter((o) => o.status === 'To confirm').length
+  const open = BUSINESS_OBJECTS.filter((o) => o.status !== 'Confirmed').length
 
   return (
     <>
@@ -502,43 +526,47 @@ export function BusinessObjectsPage() {
         title="Process Ontology"
         subtitle="The objects the landscape keeps, what each one is made of, and how they join up."
         tabs={TABS}
-        actions={
-          <Badge tone={toConfirm ? 'warning' : 'success'}>
-            {toConfirm} of {BUSINESS_OBJECTS.length} still to confirm
-          </Badge>
-        }
       />
 
-      {/* ------------------------------------------------------- the map */}
-      <Card className="mb-4">
+      {/* ------------------------------------------------------- the model */}
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold text-text">Unified data model · ontology</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Object types, links, actions and functions. Correct the{' '}
+            <span className="font-medium text-accent">To confirm</span> and{' '}
+            <span className="font-medium text-accent">Proposed</span> items with us in the workshop.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-success" /> confirmed
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {open} still open
+          </span>
+          <span className="font-mono text-subtle">
+            {BUSINESS_OBJECTS.length} object types · {OBJECT_LINKS.length} link types
+          </span>
+        </div>
+      </div>
+
+      <Card className="mb-5">
         <CardHeader
-          title="How everything connects"
-          subtitle="Hover an object to pick out its links. Press one and the detail below follows."
-          actions={
-            <span className="flex flex-wrap items-center gap-3 text-[11px] text-muted">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-success" /> confirmed
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-accent" /> to confirm
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-0 w-5 border-t-2 border-primary" /> links of the chosen object
-              </span>
-            </span>
-          }
+          title="Model overview"
+          subtitle="The full model at a glance. Press any node to inspect it in the panel below."
         />
         <div className="j2w-scroll overflow-x-auto px-4 pb-4">
-          <ObjectMap selectedId={object.id} onSelect={setSelectedId} />
+          <ModelOverview selectedId={object.id} onSelect={setSelectedId} />
         </div>
       </Card>
 
-      {/* --------------------------------------------------- the details */}
-      <div className="grid gap-4 lg:grid-cols-[286px_minmax(0,1fr)]">
-        <Card className="self-start">
-          <CardHeader title="Business objects" />
-          <CardBody className="j2w-scroll max-h-[760px] space-y-0.5 overflow-y-auto p-2">
-            {BUSINESS_OBJECTS.map((o) => {
+      {/* ------------------------------------------- object types and detail */}
+      <div className="grid gap-4 lg:grid-cols-[292px_minmax(0,1fr)] lg:items-start">
+        <Card className="overflow-hidden lg:sticky lg:top-2">
+          <Eyebrow className="border-b border-line bg-surface2 px-4 py-2">Object types</Eyebrow>
+          <div className="j2w-scroll max-h-[640px] overflow-y-auto">
+            {BUSINESS_OBJECTS.map((o, i) => {
               const Icon = OBJECT_ICONS[o.icon] ?? Boxes
               const active = o.id === object.id
               return (
@@ -547,125 +575,172 @@ export function BusinessObjectsPage() {
                   type="button"
                   onClick={() => setSelectedId(o.id)}
                   className={cn(
-                    'flex w-full items-start gap-2.5 rounded-md border px-2.5 py-2 text-left transition-colors',
-                    active
-                      ? 'border-primary/40 bg-primary-soft'
-                      : 'border-transparent hover:border-line hover:bg-surface2',
+                    'relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
+                    i > 0 && 'border-t border-line',
+                    active ? 'bg-primary-soft' : 'hover:bg-surface2',
                   )}
                 >
-                  <Icon size={15} className={cn('mt-0.5 shrink-0', active ? 'text-primary' : 'text-subtle')} />
+                  {active && <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-primary" />}
+                  <span
+                    className={cn(
+                      'grid h-7 w-7 shrink-0 place-items-center rounded-md',
+                      active ? 'bg-primary/15' : 'bg-surface2',
+                    )}
+                  >
+                    <Icon size={15} className={active ? 'text-primary' : 'text-subtle'} />
+                  </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-text">{o.name}</span>
-                    <span className="block truncate text-[11px] text-muted">{o.grain}</span>
+                    <span className="block truncate text-[13px] font-medium text-text">{o.name}</span>
+                    <span className="block truncate text-[11px] text-subtle">{o.grain}</span>
                   </span>
                   <StatusDot status={o.status} />
                 </button>
               )
             })}
-          </CardBody>
+          </div>
         </Card>
 
-        <div className="min-w-0 space-y-4">
-          <Card>
-            <CardHeader
-              title={object.name}
-              subtitle={object.what}
-              actions={
-                <span className="flex items-center gap-2">
-                  <Badge tone="neutral" mono>
-                    {object.technicalId}
-                  </Badge>
-                  <Badge tone={object.status === 'Confirmed' ? 'success' : 'warning'}>{object.status}</Badge>
-                </span>
-              }
-            />
-            <CardBody className="grid gap-3 sm:grid-cols-3">
-              <Fact label="Grain" value={object.grain} />
-              <Fact label="Primary key" value={object.primaryKey} mono />
-              <Fact label="Live rows now" value={num(rows[object.id] ?? 0)} mono />
-            </CardBody>
-          </Card>
+        <Card className="min-w-0">
+          <CardBody className="space-y-5">
+            {/* ------------------------------------------------- the header */}
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Eyebrow>Object type</Eyebrow>
+                  <div className="mt-0.5 text-lg font-semibold text-text">{object.name}</div>
+                </div>
+                <Badge tone={statusTone(object.status)}>{object.status}</Badge>
+              </div>
+              <div className="mt-1 font-mono text-[11px] text-subtle">{object.technicalId}</div>
+              <p className="mt-2 text-xs text-muted">{object.what}</p>
 
-          <Card>
-            <CardHeader title="Properties" actions={<Badge tone="neutral">{object.properties.length} fields</Badge>} />
-            <DataTable
-              rows={object.properties}
-              rowKey={(f) => f.name}
-              dense
-              rowTone={(f) => (f.status === 'To confirm' ? 'warning' : undefined)}
-              columns={[
-                {
-                  key: 'name',
-                  header: 'Field',
-                  width: 200,
-                  render: (f) => (
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[12px] text-text">{f.name}</span>
-                      {f.key && <Badge tone={f.key === 'PK' ? 'primary' : 'neutral'}>{f.key}</Badge>}
-                    </span>
-                  ),
-                },
-                { key: 'means', header: 'What it means' },
-                { key: 'from', header: 'Comes from', width: 250, mono: true },
-                { key: 'type', header: 'Type', width: 90 },
-                {
-                  key: 'status',
-                  header: '',
-                  width: 40,
-                  sortable: false,
-                  render: (f) => <StatusDot status={f.status} />,
-                },
-              ]}
-              empty="No fields recorded."
-            />
-          </Card>
-
-          <Card>
-            <CardHeader title="Connected to" subtitle="Press a neighbour to open it." />
-            <CardBody>
-              <NeighbourGraph object={object} onSelect={setSelectedId} />
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Where the data comes from" />
-            <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <Fact label="System" value={object.source.system} />
-              <Fact label="Table" value={object.source.table ? TABLE_LABEL[object.source.table] : 'no table of its own'} mono />
-              <Fact
-                label="Interface"
-                value={object.source.interfaceId ?? 'none'}
-                mono
-                onClick={object.source.interfaceId ? () => navigate(`/interfaces?interface=${object.source.interfaceId}`) : undefined}
-              />
-              <Fact label="Live rows now" value={num(rows[object.id] ?? 0)} mono />
-              <Fact label="Refresh" value={object.source.refresh} />
-              <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
-                <div className="text-label font-semibold uppercase text-subtle">Checks that guard it</div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  {object.source.checks.length === 0 ? (
-                    <span className="text-xs text-muted">none</span>
-                  ) : (
-                    object.source.checks.map((c) => (
-                      <Chip key={c} onClick={() => navigate('/flow/checks')}>
-                        {c}
-                      </Chip>
-                    ))
-                  )}
-                  <Badge tone={object.source.status === 'Confirmed' ? 'success' : 'warning'} className="ml-auto">
-                    {object.source.status}
-                  </Badge>
+              <div className="mt-3 space-y-1.5 text-xs">
+                <div className="flex justify-between gap-3">
+                  <span className="shrink-0 text-muted">Grain</span>
+                  <span className="text-right font-medium text-text">{object.grain}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="shrink-0 text-muted">Primary key</span>
+                  <span className="text-right font-mono font-medium text-text">{object.primaryKey}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="shrink-0 text-muted">Live rows now</span>
+                  <span className="text-right font-mono font-medium text-text">{num(rows[object.id] ?? 0)}</span>
                 </div>
               </div>
-            </CardBody>
-          </Card>
-        </div>
+            </div>
+
+            {/* --------------------------------------------- the properties */}
+            <div>
+              <Eyebrow className="mb-2">Properties</Eyebrow>
+              <div className="space-y-2.5">
+                {object.properties.map((f) => (
+                  <div key={f.name} className="border-b border-line pb-2 text-xs last:border-b-0 last:pb-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate font-mono font-medium text-text">{f.name}</span>
+                        {f.key && (
+                          <span
+                            title={f.key === 'PK' ? 'Primary key' : 'Points at another object'}
+                            className={cn(
+                              'rounded px-1 text-[9px] font-semibold',
+                              f.key === 'PK' ? 'bg-primary-soft text-primary' : 'bg-surface2 text-muted',
+                            )}
+                          >
+                            {f.key}
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className="text-subtle">{f.type}</span>
+                        <StatusDot status={f.status} />
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-subtle">{f.means}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-[10.5px] text-muted">{f.from}</span>
+                      {f.computedBy && <MetaChip title="Computed by a rule">ƒ computed by {f.computedBy}</MetaChip>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ------------------------------------ actions and functions */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Eyebrow className="mb-2">Action types</Eyebrow>
+                <div className="flex flex-wrap gap-1.5">
+                  {object.actions.length === 0 ? (
+                    <span className="text-xs text-muted">none</span>
+                  ) : (
+                    object.actions.map((a) => <MetaChip key={a}>{a}</MetaChip>)
+                  )}
+                </div>
+              </div>
+              <div>
+                <Eyebrow className="mb-2">Functions</Eyebrow>
+                <div className="flex flex-wrap gap-1.5">
+                  {object.functions.length === 0 ? (
+                    <span className="text-xs text-muted">none</span>
+                  ) : (
+                    object.functions.map((f) => <MetaChip key={f}>ƒ {f}</MetaChip>)
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ------------------------------------------- the link graph */}
+            <div>
+              <Eyebrow className="mb-2">Link types</Eyebrow>
+              <LinkTypeGraph object={object} onSelect={setSelectedId} />
+            </div>
+
+            {/* ----------------------------------------- where it is bound */}
+            <div>
+              <Eyebrow className="mb-2">Data binding</Eyebrow>
+              <div className="space-y-1.5 rounded-md border border-line bg-surface2/60 p-2.5 text-xs">
+                <Bound label="System" value={object.source.system} />
+                <Bound label="Table" value={object.source.table ? TABLE_LABEL[object.source.table] : 'no table of its own'} mono />
+                <Bound label="Layer" value={object.source.layer} />
+                <Bound
+                  label="Interface"
+                  value={object.source.interfaceId ?? 'none'}
+                  mono
+                  onClick={
+                    object.source.interfaceId
+                      ? () => navigate(`/interfaces?interface=${object.source.interfaceId}`)
+                      : undefined
+                  }
+                />
+                <Bound label="Refresh" value={object.source.refresh} />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="shrink-0 text-muted">Checks that guard it</span>
+                  <span className="flex flex-wrap justify-end gap-1.5">
+                    {object.source.checks.length === 0 ? (
+                      <span className="text-muted">none</span>
+                    ) : (
+                      object.source.checks.map((c) => (
+                        <Chip key={c} onClick={() => navigate('/flow/checks')}>
+                          {c}
+                        </Chip>
+                      ))
+                    )}
+                  </span>
+                </div>
+                <div className="pt-0.5">
+                  <Badge tone={statusTone(object.source.status)}>{object.source.status}</Badge>
+                </div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
       </div>
     </>
   )
 }
 
-function Fact({
+function Bound({
   label,
   value,
   mono,
@@ -676,281 +751,452 @@ function Fact({
   mono?: boolean
   onClick?: () => void
 }) {
-  const body = (
-    <>
-      <div className="text-label font-semibold uppercase text-subtle">{label}</div>
-      <div className={cn('mt-0.5 truncate text-sm text-text', mono && 'font-mono text-[12.5px]')}>{value}</div>
-    </>
-  )
-  if (!onClick) return <div className="min-w-0 rounded-md border border-line bg-surface2/60 px-3 py-2">{body}</div>
+  const text = <span className={cn('text-right font-medium text-text', mono && 'font-mono')}>{value}</span>
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="min-w-0 rounded-md border border-line bg-surface2/60 px-3 py-2 text-left transition-colors hover:bg-surface2"
-    >
-      {body}
-    </button>
+    <div className="flex justify-between gap-3">
+      <span className="shrink-0 text-muted">{label}</span>
+      {onClick ? (
+        <button type="button" onClick={onClick} className="rounded-sm text-right transition-colors hover:underline">
+          {text}
+        </button>
+      ) : (
+        text
+      )}
+    </div>
   )
 }
 
-/** One node, drawn the same way on both graphs. */
-function ObjectNode({
+/* -------------------------------------------------------------------------- */
+/* The two graphs                                                             */
+/* -------------------------------------------------------------------------- */
+
+/** One node, drawn at a percentage position on either graph. */
+function GraphNode({
   object,
-  x,
-  y,
-  width,
+  left,
+  top,
   state,
   onSelect,
   onHover,
 }: {
   object: BusinessObject
-  x: number
-  y: number
-  width: number
+  left: number
+  top: number
   state: 'selected' | 'linked' | 'dim'
-  onSelect: () => void
+  onSelect?: () => void
   onHover?: (id: string | null) => void
 }) {
   const Icon = OBJECT_ICONS[object.icon] ?? Boxes
   return (
     <button
       type="button"
+      disabled={!onSelect}
       onClick={onSelect}
       onMouseEnter={() => onHover?.(object.id)}
       onMouseLeave={() => onHover?.(null)}
       title={`${object.name} — ${object.grain}`}
-      style={{ left: x, top: y, width }}
+      style={{ left: `${left}%`, top: `${top}%` }}
       className={cn(
-        'absolute flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left transition-all duration-150',
+        'absolute flex w-[138px] -translate-x-1/2 -translate-y-1/2 items-start gap-1.5 rounded-md border px-2 py-1.5 text-left shadow-sm transition-all duration-150',
         state === 'selected'
-          ? 'border-primary bg-primary-soft shadow-md ring-2 ring-primary/30'
+          ? 'border-primary bg-primary-soft shadow-md ring-2 ring-primary/25'
           : state === 'linked'
-            ? 'border-line-strong bg-surface shadow-sm hover:-translate-y-px hover:shadow-md'
-            : 'border-line bg-surface opacity-70 hover:opacity-100',
+            ? 'border-line-strong bg-surface hover:-translate-y-[calc(50%+1px)] hover:shadow-md'
+            : 'border-line bg-surface opacity-60 hover:opacity-100',
       )}
     >
-      <Icon size={13} className={cn('shrink-0', state === 'selected' ? 'text-primary' : 'text-subtle')} />
-      <span
-        className={cn(
-          'min-w-0 flex-1 overflow-hidden text-[11px] font-medium leading-[1.15]',
-          state === 'selected' ? 'text-primary' : 'text-text',
-        )}
-      >
-        {object.name}
+      <Icon size={13} className={cn('mt-[1px] shrink-0', state === 'selected' ? 'text-primary' : 'text-subtle')} />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span
+            className={cn(
+              'min-w-0 flex-1 text-[11px] font-semibold leading-tight',
+              state === 'selected' ? 'text-primary' : 'text-text',
+            )}
+          >
+            {object.name}
+          </span>
+          <StatusDot status={object.status} />
+        </span>
       </span>
-      <span
-        className={cn(
-          'h-1.5 w-1.5 shrink-0 rounded-full',
-          object.status === 'Confirmed' ? 'bg-success' : 'bg-accent',
-        )}
-      />
     </button>
   )
 }
 
-/** The relation written on a link. */
-function LinkLabel({ x, y, label, cardinality }: { x: number; y: number; label: string; cardinality: string }) {
+/**
+ * The canvas is stretched to fit, so one per cent across is not one per cent
+ * down. Both graphs pass their drawn size in, and a link is pulled back to the
+ * edge of each node so the arrowhead never lands on top of a box.
+ */
+/** Half a node chip, for stopping a link at its edge. */
+const NODE_BOX = { w: 138, h: 40 }
+const NODE_GAP = 9
+
+/** Measure the canvas, so the graph can be drawn in real pixels. */
+function useCanvasSize() {
+  const [size, setSize] = useState({ w: 0, h: 0 })
+  const ref = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return
+    const read = () => setSize({ w: el.clientWidth, h: el.clientHeight })
+    read()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+  }, [])
+  return [ref, size] as const
+}
+
+/** Where a node sits on the canvas, in pixels. */
+function spot(pos: { x: number; y: number }, size: { w: number; h: number }) {
+  return { x: (pos.x / 100) * size.w, y: (pos.y / 100) * size.h }
+}
+
+/**
+ * Pull a link back to the edge of the chip at each end, so the arrowhead
+ * lands in clear space instead of on top of a box.
+ */
+function edges(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  box: { w: number; h: number } = NODE_BOX,
+  gap: number = NODE_GAP,
+) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len
+  const uy = dy / len
+  const hitX = Math.abs(ux) < 1e-6 ? Infinity : box.w / 2 / Math.abs(ux)
+  const hitY = Math.abs(uy) < 1e-6 ? Infinity : box.h / 2 / Math.abs(uy)
+  const back = Math.min(hitX, hitY) + gap
+  // Two chips almost touching would turn the link inside out.
+  if (back * 2 >= len) return null
+  return { a: { x: a.x + ux * back, y: a.y + uy * back }, b: { x: b.x - ux * back, y: b.y - uy * back } }
+}
+
+/** The relation name, with the cardinality written at each end of the line. */
+function LinkMarks({
+  a,
+  b,
+  label,
+  cardinality,
+  accent,
+}: {
+  a: { x: number; y: number }
+  b: { x: number; y: number }
+  label: string
+  cardinality: string
+  accent?: boolean
+}) {
+  const [one, many] = cardinality.split('\u2192').map((v) => v.trim())
+  const at = (t: number) => ({ left: a.x + (b.x - a.x) * t, top: a.y + (b.y - a.y) * t })
+  // On a short link the two ends would sit under the name, so leave them off.
+  const room = Math.hypot(b.x - a.x, b.y - a.y) > 110
   return (
-    <span
-      style={{ left: x, top: y }}
-      className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] text-muted shadow-sm"
-    >
-      {label} <span className="font-mono text-[9.5px] text-subtle">{cardinality}</span>
-    </span>
+    <>
+      <span
+        style={at(0.5)}
+        className={cn(
+          'pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded border px-1.5 py-px text-[11px] font-semibold shadow-sm',
+          accent ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-text',
+        )}
+      >
+        {label}
+      </span>
+      {room && (
+        <>
+          <span
+            style={at(0.08)}
+            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-muted"
+          >
+            {one}
+          </span>
+          <span
+            style={at(0.92)}
+            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-muted"
+          >
+            {many}
+          </span>
+        </>
+      )}
+    </>
   )
 }
 
-/** The selected object in the middle, everything joined to it around the edge. */
-function NeighbourGraph({ object, onSelect }: { object: BusinessObject; onSelect: (id: string) => void }) {
+/* -------------------------------------------------------------------------- */
+/* The model overview                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The overview is drawn on a canvas of a known size: the cards are a fixed
+ * number of pixels, their positions are a percentage of the canvas, and every
+ * link is cut back to the card edges at both ends. The positions in the data
+ * were chosen against that geometry, so no line passes behind a card and no
+ * chip lands on one. Widening the canvas only pushes the cards further apart,
+ * which can only add clearance.
+ */
+const CARD = { w: 180, h: 94 }
+const CARD_GAP = 10
+const MARK_AT = 11 // how far along the line the cardinality is written
+const CANVAS = { w: 1240, h: 860 }
+
+/** Green once the object is agreed, amber while it is still open. */
+function cardTone(status: ObjStatus) {
+  return status === 'Confirmed'
+    ? { border: 'border-success', dot: 'bg-success' }
+    : { border: 'border-accent', dot: 'bg-accent' }
+}
+
+/** One object type, as a card on the model overview. */
+function OverviewCard({
+  object,
+  selected,
+  onSelect,
+  onHover,
+}: {
+  object: BusinessObject
+  selected: boolean
+  onSelect: () => void
+  onHover: (id: string | null) => void
+}) {
+  const tone = cardTone(object.status)
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      onMouseEnter={() => onHover(object.id)}
+      onMouseLeave={() => onHover(null)}
+      title={`${object.name} — ${object.grain}`}
+      style={{ left: `${object.pos.x}%`, top: `${object.pos.y}%`, width: CARD.w, height: CARD.h }}
+      className={cn(
+        'absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col justify-center gap-1 overflow-hidden',
+        'rounded-lg border-2 bg-surface px-3 text-left shadow-sm transition-shadow duration-150 hover:shadow-md',
+        selected ? 'border-primary shadow-md ring-2 ring-primary/20' : tone.border,
+      )}
+    >
+      <span className="flex items-start gap-2">
+        <span className={cn('mt-[5px] h-2 w-2 shrink-0 rounded-full', selected ? 'bg-primary' : tone.dot)} />
+        <span
+          className={cn(
+            'min-w-0 text-[16px] font-semibold leading-[19px]',
+            selected ? 'text-primary' : 'text-text',
+          )}
+        >
+          {object.name}
+        </span>
+      </span>
+      <span className="pl-4 text-[11px] leading-[14px] text-subtle">{object.grain}</span>
+    </button>
+  )
+}
+
+/** The link name in a chip, with the cardinality just outside each card. */
+function OverviewLinkMarks({
+  a,
+  b,
+  link,
+  on,
+}: {
+  a: { x: number; y: number }
+  b: { x: number; y: number }
+  link: ObjLink
+  on: boolean
+}) {
+  const [one, many] = link.cardinality.split('→').map((v) => v.trim())
+  const at = (t: number) => ({ left: a.x + (b.x - a.x) * t, top: a.y + (b.y - a.y) * t })
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const mark = 'pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 text-[11px] font-semibold text-muted'
+  return (
+    <>
+      <span
+        style={at(link.at ?? 0.5)}
+        className={cn(
+          'pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap',
+          'rounded-full border px-2 py-[2px] text-[10.5px] font-medium shadow-sm',
+          on ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-muted',
+        )}
+      >
+        {link.label}
+      </span>
+      <span style={at(MARK_AT / len)} className={mark}>
+        {one}
+      </span>
+      <span style={at(1 - MARK_AT / len)} className={mark}>
+        {many}
+      </span>
+    </>
+  )
+}
+
+/** Every object type and every link type, on one canvas. */
+function ModelOverview({ selectedId, onSelect }: { selectedId: string; onSelect: (id: string) => void }) {
   const t = useThemeTokens()
-  const list = neighboursOf(object.id)
-  if (!list.length) return <p className="text-sm text-muted">Nothing joins to this object yet.</p>
+  const [ref, size] = useCanvasSize()
+  const [hover, setHover] = useState<string | null>(null)
+  const active = hover ?? selectedId
 
-  const W = 880
-  const NODE_W = 150
-  const NODE_H = 32
-  const H = list.length > 4 ? 300 : 250
-  const cx = W / 2
-  const cy = H / 2
-  const rx = W / 2 - 110
-  const ry = H / 2 - 42
+  // The layout was solved against CANVAS exactly, so the graph is drawn in
+  // that coordinate space and then scaled up to fill whatever room it is
+  // given. Scaling, rather than stretching, keeps every clearance intact.
+  const scale = size.w > 0 ? Math.max(1, size.w / CANVAS.w) : 1
 
-  const points = list.map((n, i) => {
-    const angle = (i / list.length) * Math.PI * 2 - Math.PI / 2
-    return { ...n, x: cx + Math.cos(angle) * rx, y: cy + Math.sin(angle) * ry }
-  })
+  const drawn = OBJECT_LINKS.map((l) => ({
+    link: l,
+    on: l.from === active || l.to === active,
+    e: edges(spot(objectById(l.from)!.pos, CANVAS), spot(objectById(l.to)!.pos, CANVAS), CARD, CARD_GAP),
+  })).filter((d): d is { link: ObjLink; on: boolean; e: NonNullable<typeof d.e> } => d.e !== null)
+
+  const line = (d: (typeof drawn)[number]) => (
+    <line
+      key={`${d.link.from}-${d.link.to}-${d.link.label}`}
+      x1={d.e.a.x}
+      y1={d.e.a.y}
+      x2={d.e.b.x}
+      y2={d.e.b.y}
+      stroke={d.on ? t.primary : t['line-strong']}
+      strokeWidth={d.on ? 2.2 : 1.3}
+      markerEnd={d.on ? 'url(#ont-arrow-on)' : 'url(#ont-arrow)'}
+    />
+  )
 
   return (
-    <div className="j2w-scroll overflow-x-auto">
-      <div className="relative" style={{ width: W, height: H }}>
-        <svg className="pointer-events-none absolute inset-0" width={W} height={H}>
+    <div ref={ref} className="relative" style={{ height: CANVAS.h * scale, minWidth: CANVAS.w }}>
+      <div
+        className="absolute left-0 top-0"
+        style={{ width: CANVAS.w, height: CANVAS.h, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+      >
+        <svg className="absolute inset-0 h-full w-full overflow-visible">
           <defs>
-            <marker id="nb-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-              <path d="M 0 0 L 7 3.5 L 0 7 z" fill={t.primary} />
-            </marker>
+            {[
+              { id: 'ont-arrow', fill: t['line-strong'] },
+              { id: 'ont-arrow-on', fill: t.primary },
+            ].map((m) => (
+              <marker
+                key={m.id}
+                id={m.id}
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="8"
+                markerHeight="8"
+                markerUnits="userSpaceOnUse"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 z" fill={m.fill} />
+              </marker>
+            ))}
           </defs>
-          {points.map((n) => {
-            const dx = n.x - cx
-            const dy = n.y - cy
-            const len = Math.hypot(dx, dy) || 1
-            const pad = 74
-            const ax = cx + (dx / len) * 72
-            const ay = cy + (dy / len) * 24
-            const bx = n.x - (dx / len) * pad
-            const by = n.y - (dy / len) * 20
-            return (
-              <line
-                key={`l-${n.other.id}-${n.link.label}`}
-                x1={n.outgoing ? ax : bx}
-                y1={n.outgoing ? ay : by}
-                x2={n.outgoing ? bx : ax}
-                y2={n.outgoing ? by : ay}
-                stroke={t.primary}
-                strokeOpacity={0.55}
-                strokeWidth={1.5}
-                markerEnd="url(#nb-arrow)"
-              />
-            )
-          })}
+          {/* the quiet links first, so a highlighted one is never drawn under one */}
+          {drawn.filter((d) => !d.on).map(line)}
+          {drawn.filter((d) => d.on).map(line)}
         </svg>
 
-        {points.map((n) => (
-          <LinkLabel
-            key={`t-${n.other.id}-${n.link.label}`}
-            x={(cx + n.x) / 2}
-            y={(cy + n.y) / 2}
-            label={n.link.label}
-            cardinality={n.link.cardinality}
+        {BUSINESS_OBJECTS.map((o) => (
+          <OverviewCard
+            key={o.id}
+            object={o}
+            selected={o.id === selectedId}
+            onSelect={() => onSelect(o.id)}
+            onHover={setHover}
           />
         ))}
 
-        {points.map((n) => (
-          <ObjectNode
-            key={n.other.id}
-            object={n.other}
-            x={n.x - NODE_W / 2}
-            y={n.y - NODE_H / 2}
-            width={NODE_W}
-            state="linked"
-            onSelect={() => onSelect(n.other.id)}
+        {drawn.map((d) => (
+          <OverviewLinkMarks
+            key={`m-${d.link.from}-${d.link.to}-${d.link.label}`}
+            a={d.e.a}
+            b={d.e.b}
+            link={d.link}
+            on={d.on}
           />
         ))}
-
-        <div
-          style={{ left: cx - 82, top: cy - 20, width: 164 }}
-          className="absolute flex items-center justify-center gap-1.5 rounded-lg border-2 border-primary bg-primary-soft px-3 py-2 shadow-md"
-        >
-          <span className="truncate text-xs font-semibold text-primary">{object.name}</span>
-        </div>
       </div>
     </div>
   )
 }
 
-/** Every object at once, in four bands. */
-function ObjectMap({ selectedId, onSelect }: { selectedId: string; onSelect: (id: string) => void }) {
+/** The chosen object in the middle, everything joined to it around it. */
+function LinkTypeGraph({ object, onSelect }: { object: BusinessObject; onSelect: (id: string) => void }) {
   const t = useThemeTokens()
-  const [hover, setHover] = useState<string | null>(null)
+  const [ref, size] = useCanvasSize()
+  const list = neighboursOf(object.id)
+  if (!list.length) return <p className="text-xs text-muted">Nothing joins to this object yet.</p>
 
-  const W = 1168
-  const BAND_H = 112
-  const NODE_W = 150
-  const NODE_H = 38
-  const H = OBJECT_BANDS.length * BAND_H + 8
-
-  /* One pitch for the whole map, so a band of two reads as deliberately spaced
-     rather than stranded, and a band of seven still fits. */
-  const place = useMemo(() => {
-    const out: Record<string, { x: number; y: number }> = {}
-    const widest = Math.max(...OBJECT_BANDS.map((b) => BUSINESS_OBJECTS.filter((o) => o.band === b).length))
-    const pitch = (W - 48) / widest
-    OBJECT_BANDS.forEach((band, bi) => {
-      const inBand = BUSINESS_OBJECTS.filter((o) => o.band === band)
-      const start = (W - inBand.length * pitch) / 2
-      inBand.forEach((o, i) => {
-        out[o.id] = { x: start + pitch * i + pitch / 2 - NODE_W / 2, y: 50 + bi * BAND_H }
-      })
-    })
-    return out
-  }, [])
-
-  const centre = (id: string) => ({ x: place[id].x + NODE_W / 2, y: place[id].y + NODE_H / 2 })
-  const active = hover ?? selectedId
-  const linked = (id: string) =>
-    OBJECT_LINKS.some((l) => (l.from === active && l.to === id) || (l.to === active && l.from === id))
-
-  const activeLinks = OBJECT_LINKS.filter((l) => l.from === active || l.to === active)
+  // A ring of two needs far less room than a ring of eight.
+  const height = list.length <= 2 ? 230 : list.length <= 4 ? 330 : 420
+  const centre = { x: 50, y: 50 }
+  const points = list.map((n, i) => {
+    const angle = (i / list.length) * Math.PI * 2 - Math.PI / 2
+    return { ...n, x: 50 + Math.cos(angle) * 31, y: 50 + Math.sin(angle) * 33 }
+  })
+  const run = (n: (typeof points)[number]) =>
+    edges(
+      spot(n.outgoing ? centre : { x: n.x, y: n.y }, size),
+      spot(n.outgoing ? { x: n.x, y: n.y } : centre, size),
+    )
 
   return (
-    <div className="relative" style={{ width: W, height: H }}>
-      {OBJECT_BANDS.map((band, bi) => (
-        <div
-          key={band}
-          style={{ left: 6, top: 20 + bi * BAND_H, width: W - 12, height: BAND_H - 16 }}
-          className="absolute rounded-xl border border-dashed border-line bg-surface2/40"
-        >
-          <span className="absolute left-3 top-1.5 text-label font-semibold uppercase tracking-wider text-subtle">
-            {band}
-          </span>
-        </div>
-      ))}
+    <div className="j2w-scroll overflow-x-auto">
+      <div
+        ref={ref}
+        style={{ height }}
+        className="relative min-w-[620px] rounded-md border border-line bg-surface2/50"
+      >
+        <svg className="absolute inset-0 h-full w-full overflow-visible">
+          <defs>
+            <marker id="olg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill={t.subtle} />
+            </marker>
+          </defs>
+          {size.w > 0 &&
+            points.map((n) => {
+              const e = run(n)
+              if (!e) return null
+              return (
+                <line
+                  key={`l-${n.other.id}-${n.link.label}`}
+                  x1={e.a.x}
+                  y1={e.a.y}
+                  x2={e.b.x}
+                  y2={e.b.y}
+                  stroke={t.subtle}
+                  strokeOpacity={1}
+                  strokeWidth={1.8}
+                  markerEnd="url(#olg-arrow)"
+                />
+              )
+            })}
+        </svg>
 
-      <svg className="pointer-events-none absolute inset-0" width={W} height={H}>
-        <defs>
-          <marker id="map-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-            <path d="M 0 0 L 7 3.5 L 0 7 z" fill={t.primary} />
-          </marker>
-        </defs>
-        {OBJECT_LINKS.map((l, i) => {
-          const a = centre(l.from)
-          const b = centre(l.to)
-          const on = l.from === active || l.to === active
-          const mx = (a.x + b.x) / 2
-          const my = (a.y + b.y) / 2 + ((i % 3) - 1) * 14
-          return (
-            <path
-              key={`${l.from}-${l.to}-${l.label}`}
-              d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`}
-              fill="none"
-              stroke={on ? t.primary : t['line-strong']}
-              strokeOpacity={on ? 0.8 : 0.4}
-              strokeWidth={on ? 1.8 : 1}
-              markerEnd={on ? 'url(#map-arrow)' : undefined}
-            />
-          )
-        })}
-      </svg>
-
-      {BUSINESS_OBJECTS.map((o) => (
-        <ObjectNode
-          key={o.id}
-          object={o}
-          x={place[o.id].x}
-          y={place[o.id].y}
-          width={NODE_W}
-          state={o.id === selectedId ? 'selected' : linked(o.id) || o.id === active ? 'linked' : 'dim'}
-          onSelect={() => onSelect(o.id)}
-          onHover={setHover}
-        />
-      ))}
-
-      {activeLinks.map((l, i) => {
-        const a = centre(l.from)
-        const b = centre(l.to)
-        const idx = OBJECT_LINKS.indexOf(l)
-        /* nudged off the straight midpoint so a label never sits on a node */
-        const lift = a.y === b.y ? -26 : ((idx % 3) - 1) * 9 + ((i % 2) - 0.5) * 16
-        return (
-          <LinkLabel
-            key={`lab-${l.from}-${l.to}-${l.label}`}
-            x={(a.x + b.x) / 2}
-            y={(a.y + b.y) / 2 + lift}
-            label={l.label}
-            cardinality={l.cardinality}
+        {points.map((n) => (
+          <GraphNode
+            key={n.other.id}
+            object={n.other}
+            left={n.x}
+            top={n.y}
+            state="linked"
+            onSelect={() => onSelect(n.other.id)}
           />
-        )
-      })}
+        ))}
+
+        {size.w > 0 &&
+          points.map((n) => {
+            const e = run(n)
+            if (!e) return null
+            return (
+              <LinkMarks
+                key={`m-${n.other.id}-${n.link.label}`}
+                a={e.a}
+                b={e.b}
+                label={n.link.label}
+                cardinality={n.link.cardinality}
+              />
+            )
+          })}
+
+        <GraphNode object={object} left={centre.x} top={centre.y} state="selected" />
+      </div>
     </div>
   )
 }
+

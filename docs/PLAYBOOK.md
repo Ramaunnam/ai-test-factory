@@ -44,7 +44,7 @@ Plain words come first. The technical term is in brackets the first time it appe
 4. **What the client gets.** One confidence score, a release gate (GO / CONDITIONAL / NO-GO) with
    six computed criteria, and a sealed evidence pack per release that an auditor can read.
 5. **What is on offer.** Not only a tool: a testing framework plus a team (a pod) that owns the
-   result. See **Command Centre → Framework & Pod**.
+   result — the framework is the story told across the five sections of this playbook.
 
 ---
 
@@ -893,35 +893,6 @@ if this shipped."*
 
 ---
 
-#### Tab 5 — Framework & Pod (`/offer`)
-
-**Purpose.** What is being offered — a framework plus a team, not a licence.
-
-**On the screen.** **The framework in five steps** (Learn → Build → Run → Watch → Prove), each with
-a **See it** button into the working screen → **The pod** (Pod lead · SAP and D365 test specialists
-· Automation engineers · AI agent engineer; *Pod size is set per phase*) → **What we commit to**
-(badge *Targets to agree*) → **Expected benefits** (badge *Illustrative*) → **How we start**
-(Pilot 6 weeks → Extend → Run) → **A tool demo, against a framework and a pod**.
-
-**What we commit to** — today's value is live where the factory already measures it:
-
-| Commitment | Where it stands today | Live? |
-|---|---|---|
-| A full re-test inside 1 day of a change being ready | About 3 weeks of key-user testing | illustrative |
-| 100 % of the main workflows automated within 12 weeks | the share of the six workflows that have scenarios | **live** |
-| An evidence pack sealed for every release | the number of packs sealed and locked | **live** |
-| Month-end freeze down from 10 days to 3 | the days on the current close calendar | **live** |
-| Key-user manual testing hours cut by three quarters | around 160 hours a release | illustrative |
-
-**Buttons.** *Open the Testing Journey* · five *See it* buttons · *Walk the journey*.
-
-**Journey step** all eight · **Requirement** the whole set.
-
-**Say this.** *"Everything on this page is already working in this demo. The confidence score was
-produced by the running plant, not written into a slide."*
-
----
-
 ### OVERVIEW · Enterprise Map (`/landscape`)
 
 **Purpose.** The whole landscape on one picture, coloured by health.
@@ -1572,7 +1543,6 @@ presses *Run* gets a short explanation instead of a dead click.
 | 12:30 | **Interface Testing** | Filter Financial + API, open a mismatched message | *"One message, two systems, every field compared."* |
 | 13:30 | **Month-End Load** | Pick 5× → *Run the load test* | *"Invoice capture gives way first, which is exactly where the two invoices are lost at the cut-off."* |
 | 14:30 | **Release & Close** | Read the six exit criteria | *"Nobody has to argue about readiness. Six conditions, each computed, each clickable."* |
-| 15:00 | **Framework & Pod** | The five steps and the pod | *"Not just a tool. A framework and a team that owns the result."* |
 
 ### 14.3 The 3-minute version
 
@@ -1661,7 +1631,7 @@ personal data — that is the whole point of the Test Data agent.
 
 **13. How are you different from a test tool vendor?**
 A tool gives you a licence and the work of running it. We give you the framework **and** the pod
-that owns the result. There is a table on Command Centre → Framework & Pod that answers this in
+that owns the result. The five framework steps — Learn, Build, Run, Watch, Prove — answer this in
 five rows: who writes the tests, who keeps them working, what happens when one fails, what an
 auditor gets, and what you are actually buying.
 
@@ -1714,7 +1684,7 @@ trace, the scoring and every screen work unchanged, because they only ever read 
 | Discovery's activity counts, arrow counts, procedure verdicts and rework cost | The month-end load capacity model and the hour-by-hour profile |
 | The vehicle-master drift found by the Master Data Check | The 4 sample master-data problems, marked *sample* |
 | Record counts per system, per interface and per workflow | The 6 historic runs and the 5 seeded schedules |
-| Today's values on Framework & Pod marked *live* | The illustrative before/after benefit bars |
+| Every count, score and live row figure on screen | The illustrative before/after benefit figures quoted in conversation |
 | Every amount, converted to the chosen currency on screen | The three currency rates, which are illustrative |
 
 The AI output — discovery, scenario generation, impact analysis, self-healing, evidence — is
@@ -1730,7 +1700,7 @@ Nothing is random: the same seed gives the same plant every time.
 3. **Keep the checks, the trace and the scoring exactly as they are.** They only ever read the
    tables, so they work the moment real rows arrive.
 4. **Re-point the interfaces** to the real middleware (EAI) queues and file drops.
-5. **Re-measure the targets.** The commitments on Framework & Pod stop being illustrative and start
+5. **Re-measure the targets.** The commitments agreed in the workshop stop being illustrative and start
    being reported.
 
 ---
@@ -1802,12 +1772,12 @@ same source as the Testing Journey.
 |---|---|---|---|
 | Live Data Flow → Live Checks, subtitle | *"Nine rules … in all nine systems"* | *"14 rules … in all 13 systems"* | the checks that ran, and the systems that hold tables |
 | Command Centre → Release & Close, Exit criteria | *"Five conditions … all five are met"* | *"6 conditions … all 6 are met"* | the length of the criteria list |
-| Command Centre → Health, Month-end readiness | *"Freeze takes 10 days today"* | *"Freeze takes 8 days today"* | `freezeDays()`, the same close calendar that Framework & Pod reads |
+| Command Centre → Health, Month-end readiness | *"Freeze takes 10 days today"* | *"Freeze takes 8 days today"* | `freezeDays()`, the same close calendar that Release & Close reads |
 | Live Data Flow → Live Flow, tiles | *"nine systems"*, *"across 9 live interfaces"* | *"13 systems"*, *"across 15 live interfaces"* | the systems with simulated data, and the interfaces marked live |
 | Command Centre → Health, records card | *"Nine systems, measured…"* | *"13 systems, measured…"* | the systems the card actually lists |
 | Process Ontology → Requirement Coverage | the older `R1`–`R10` list | **CORE-01…06 and ADV-01…04** | `src/data/journey.ts`, the same source as the Testing Journey chips |
 
-Because the freeze window is now read from one place, **Health and Framework & Pod always show the
+Because the freeze window is now read from one place, **Health and Release & Close always show the
 same number**. Change a milestone in the close calendar and both pages follow.
 
 The Requirement Coverage tab now shows, for each of the ten requirements: the id, Core or Advanced,

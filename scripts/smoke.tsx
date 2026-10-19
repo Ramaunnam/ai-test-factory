@@ -88,7 +88,6 @@ const CASES: Case[] = [
   ['Command Centre / Release', '/release', '/release', cc.ReleasePage],
   ['Command Centre / Load', '/load', '/load', cc.LoadPage],
   ['Command Centre / Simulator', '/simulator', '/simulator', cc.SimulatorPage],
-  ['Command Centre / Framework & Pod', '/offer', '/offer', cc.OfferPage],
   ['Enterprise Map', '/landscape', '/landscape', landscape.LandscapePage],
   ['Ontology / Workflows', '/ontology', '/ontology', ontology.OntologyPage],
   ['Ontology / Business Objects', '/ontology/objects', '/ontology/objects', ontology.BusinessObjectsPage],

@@ -625,14 +625,6 @@ Pick a release or individual changes, simulate, and get: a verdict, the **confid
 against the score if it shipped**, the systems changed and the systems downstream, the workflow
 stages hit, and one card per change with what stops and a timed recommendation.
 
-### Command Centre · Framework & Pod (`/offer`)
-
-What is being offered, rather than what the tool does: the framework in five steps (Learn → Build
-→ Run → Watch → Prove) with a **See it** button into the working screen for each, the pod roles,
-**what we commit to** (targets to agree, with today's value read live where the factory already
-measures it), **expected benefits** (illustrative before/after bars), how a pilot starts, and a
-tool-demo-against-pod comparison.
-
 ### Enterprise Map (`/landscape`)
 
 Ten systems and four outside finance services in three bands, nineteen interfaces, live record
@@ -643,10 +635,11 @@ shows the rows.
 
 The swim-lane table per stage: who, the three SOP steps, system, data, rule tested, AI agents,
 tests, and the **live row count** for that stage's tables. **Business Objects** is the data model:
-eighteen objects down the left, and for the selected one its grain, primary key, every property
-with its meaning, source, type and status, a small graph of what it joins to, and where the data
-comes from — system, table, interface, live rows now, refresh and the checks that guard it. One
-large graph underneath shows all eighteen in four bands with the relation on every arrow.
+a **model overview** at the top showing all eighteen with the relation and the cardinality on
+every arrow, and under it the object list and the detail for the one chosen — grain, primary key,
+every property with its meaning, source, type and status, the action types and functions, a graph
+of what it joins to, and where the data comes from (system, table, layer, interface, live rows
+now, refresh and the checks that guard it). Choosing an object never moves the page.
 Objects and fields that still need a key user to agree the mapping are marked **To confirm**.
 The Agents tab lists the eleven agents (reads → produces → works on). Coverage maps the client's
 CORE-01…06 and ADV-01…04 to the screens that prove them.
@@ -756,7 +749,7 @@ Being straight about this in front of a client is worth more than pretending eve
 | Discovery's activity counts, arrow counts, procedure verdicts and rework cost | The month-end load capacity model |
 | Record counts per system, interface and workflow | The six historic runs and the five seeded schedules |
 | The vehicle-master drift found by the Master Data Check | The four sample master-data problems, marked *sample* |
-| Today's values on Framework & Pod marked *live* | The illustrative before/after benefit bars |
+| Every count, score and live row figure on screen | The illustrative before/after benefit figures quoted in conversation |
 
 The AI output — scenario generation, discovery, impact analysis, self-healing — is pre-written
 content revealed through a live log. Every score and verdict is computed in code, never random.

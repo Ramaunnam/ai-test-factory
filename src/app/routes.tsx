@@ -21,7 +21,6 @@ const HealthPage = page(cc, 'HealthPage')
 const ReleasePage = page(cc, 'ReleasePage')
 const LoadPage = page(cc, 'LoadPage')
 const SimulatorPage = page(cc, 'SimulatorPage')
-const OfferPage = page(cc, 'OfferPage')
 const JourneyPage = page(() => import('@/pages/Journey'), 'JourneyPage')
 const LandscapePage = page(() => import('@/pages/Landscape'), 'LandscapePage')
 const OntologyPage = page(ontology, 'OntologyPage')
@@ -66,7 +65,6 @@ export function AppRoutes() {
         <Route path="/release" element={<ReleasePage />} />
         <Route path="/load" element={<LoadPage />} />
         <Route path="/simulator" element={<SimulatorPage />} />
-        <Route path="/offer" element={<OfferPage />} />
         <Route path="/journey" element={<JourneyPage />} />
         <Route path="/landscape" element={<LandscapePage />} />
         <Route path="/ontology" element={<OntologyPage />} />

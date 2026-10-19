@@ -9,3 +9,4 @@ dist-ssr
 
 # internal only, never pushed
 docs/PLAYBOOK-client-names.md
+docs/*.pdf

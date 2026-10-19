@@ -53,8 +53,6 @@ Other scripts:
     The verdict carries a number: the confidence score today against the score if the release shipped.
 14. **Release & Close** — the gate decision with its **six computed exit criteria**, so anyone can ask
     "what turns this into GO?" and get an answer, plus the close calendar and the sign-off state.
-15. **Framework & Pod** — what is actually being offered: the five-step framework, the pod, what we
-    commit to, and how a six-week pilot starts.
 
 Press <kbd>Ctrl</kbd>+<kbd>K</kbd> at any point: the command palette reaches every page, system,
 interface, scenario, finding and simulation command.
