@@ -773,6 +773,10 @@ In menu order. Each entry says what the screen is for, what is on it from top to
 button does, where the numbers come from, which journey step and requirement it proves, and the one
 line to say when showing it.
 
+The header is the same on every screen: search, the change-project selector, the role selector, a
+currency selector (EUR · USD · INR, at illustrative rates — money is held in euro and only the
+display converts) and the light/dark toggle.
+
 ---
 
 ### OVERVIEW · Command Centre
@@ -974,8 +978,8 @@ the most recent steel truck in the running plant, pinned, with where it has got 
 proven by which test.
 
 **On the screen.** Workflow chips (P1 to P6) → **Stage by stage** table (who, the three procedure
-steps, system, data, rule tested, AI agents, tests, and the live row count for that stage's tables)
-→ **Ontology graph** (workflow → stages → systems → business data → AI agents).
+steps, system, data, rule tested, AI agents, tests, and the live row count for that stage's
+tables).
 
 **Buttons.** Click a stage → its rule, its agents, its live data and the open findings against it.
 
@@ -986,12 +990,40 @@ steps, system, data, rule tested, AI agents, tests, and the live row count for t
 **Say this.** *"This is the single source of truth the scripts are written from. The counts beside
 each stage are today's real volume."*
 
-#### Tab 2 — AI Agents (`/ontology/agents`)
+#### Tab 2 — Business Objects (`/ontology/objects`)
+
+**Purpose.** The data model: what the landscape keeps, and how it joins up.
+
+**On the screen.** Eighteen objects down the left — Vehicle, Gate pass, Weighbridge ticket,
+Vendor, Purchase order, Goods receipt, Supplier invoice, Payment, Output document, Scrap receipt,
+Scrap batch, Lab sample, Quality order, Stock posting, Yard transfer, Heat, Production
+confirmation and Material — each with its grain and a status dot. On the right, for the selected
+one: the technical id and what it is, its grain and primary key, **Properties** (every field with
+PK or FK, one line of meaning, where the value arrives from, its type and a status dot),
+**Connected to** (a small graph of its direct neighbours, each arrow carrying the relation and the
+cardinality) and **Where the data comes from** (system, table, interface, live rows now, refresh,
+and the checks that guard it). Underneath, **How everything connects** draws all eighteen in four
+bands — Yard & gate, Purchasing & finance, Recycling & quality, Mill.
+
+**Buttons.** Press an object in the list, a neighbour in the small graph, or a node in the big
+graph, and the detail follows. The interface and the check ids open their own screens.
+
+**Data.** The model is written content; the live row count against each object is read from the
+running plant. Five objects and five fields are marked **To confirm**, which is where the mapping
+still needs a key user: the vehicle master, the vendor's VAT number, the quality order's grade
+window, the yard transfer tolerance and the material master.
+
+**Journey step** 2 · **Requirement** CORE-01.
+
+**Say this.** *"This is the data model behind the tests. Green is agreed, amber is what we still
+need an hour of your time for."*
+
+#### Tab 3 — AI Agents (`/ontology/agents`)
 
 Eleven agents in three groups (Build, Run, Govern). Each one says what it reads, what it produces
 and which screen shows it. Clicking an agent opens that screen. See section 12.
 
-#### Tab 3 — Requirement Coverage (`/coverage`)
+#### Tab 4 — Requirement Coverage (`/coverage`)
 
 The client's ten requirements — **CORE-01 to CORE-06** and **ADV-01 to ADV-04** — read from the
 same source as the Testing Journey chips. Each card shows the id, Core or Advanced, the short name,
@@ -1080,13 +1112,19 @@ says so."*
 
 **Purpose.** Scenarios written from the ontology and the live data, then approved by a key user.
 
-**On the screen.** Workflow chips → the **Scenario Writer agent** log (badged *Based on process map
-v1* or *v2*) → four tiles (scenarios for this workflow, approved, pending approval, failing last
-run) → **Turn a business rule into a data check** → the scenario list by type (Positive, Negative,
+**On the screen.** Workflow chips, which are **multi-select** — pick one workflow or six, with
+*Select all* and *Clear* — then the **Scenario Writer agent** log (badged *Based on process map v1*
+or *v2*), four tiles (scenarios selected, approved, pending approval, failing last run),
+**Turn a business rule into a data check**, and the scenario list by type (Positive, Negative,
 Regression).
 
-**Buttons.** *Generate scenarios with AI* writes three new ones, pending approval. A scenario row
-opens its steps in business language with the technical detail behind a toggle. *Approve* / *Reject*.
+**Buttons.** *Generate with AI (N selected)* writes scenarios for the chosen workflows only, and
+they arrive pending approval. **AI review — all workflows** runs a short review and opens a panel:
+stage coverage, scenarios by type, approved against pending, the last run, then a row per workflow
+(coverage, stages with no test, failing checks, open findings, risk), the gaps with *Generate
+these*, and the ten requirements. *Download report* opens a printable page that saves as a PDF
+from the browser's print dialogue, like the other reports. A scenario row opens its steps in
+business language with the technical detail behind a toggle. *Approve* / *Reject*.
 
 **Data.** Thirty written scenarios plus anything generated or recorded in the session. The counts
 are live.
@@ -1282,9 +1320,9 @@ an auditor can see it was not touched."*
 
 **Purpose.** Every handoff between two systems, field by field.
 
-**On the screen.** Two explainer cards (journey testing vs interface testing) → the **filter bar**
-→ six tiles (sent, received, matched, mismatched, missing, duplicated) → the interface table → an
-open interface shows its messages, newest first, with travel time and status.
+**On the screen.** The **filter bar** → six tiles (sent, received, matched, mismatched, missing,
+duplicated) → the interface table → an open interface shows its messages, newest first, with
+travel time and status.
 
 **The filter bar** narrows everything below it at once — the tiles, the table, the records list and
 *Follow the truck*:
@@ -1434,6 +1472,7 @@ to production."*
 | `/report/:runId` | Run summary: result, workflow coverage, scenarios, findings raised |
 | `/release-report/:id` | Release report: changes, blockers, recommendation |
 | `/evidence-pack/:runId` | Evidence pack: integrity hash, what is inside, every step with its screenshot and log |
+| `/studio-review` | The AI review of the whole test suite, printable |
 | `/kitchen-sink` | The design system, reachable from the command palette only |
 
 All four reports have a print button and come out clean on paper from either theme.
@@ -1676,6 +1715,7 @@ trace, the scoring and every screen work unchanged, because they only ever read 
 | The vehicle-master drift found by the Master Data Check | The 4 sample master-data problems, marked *sample* |
 | Record counts per system, per interface and per workflow | The 6 historic runs and the 5 seeded schedules |
 | Today's values on Framework & Pod marked *live* | The illustrative before/after benefit bars |
+| Every amount, converted to the chosen currency on screen | The three currency rates, which are illustrative |
 
 The AI output — discovery, scenario generation, impact analysis, self-healing, evidence — is
 pre-written content revealed through a live log. Every score and every verdict is computed in code.
@@ -1746,6 +1786,9 @@ Nothing is random: the same seed gives the same plant every time.
 | The same inputs always give the same output | Deterministic, seeded |
 | Work that goes backwards and has to be redone | Rework loop |
 | The strip under each card saying where the number came from | Provenance |
+| Money shown in another currency | Illustrative rate, display only; the stored value stays in euro |
+| What one row of an object means | Grain |
+| The field a row is identified by | Primary key (PK); a pointer to another object is a foreign key (FK) |
 
 ---
 

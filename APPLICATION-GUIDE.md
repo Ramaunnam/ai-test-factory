@@ -471,7 +471,7 @@ item is one object plus one `<Route>`.
 ```
 OVERVIEW   Command Centre   /  · /release · /load · /simulator
            Enterprise Map   /landscape
-           Process Ontology /ontology · /ontology/agents · /coverage
+           Process Ontology /ontology · /ontology/objects · /ontology/agents · /coverage
 BUILD      Process Discovery /discovery
            Test Studio      /studio · /test-data
 RUN        Live Data Flow   /flow · /flow/data · /flow/checks · /flow/trace
@@ -520,6 +520,10 @@ findings, processes **and commands** — "Truck arrives now", "All faults off", 
 Head", "Toggle the theme". Recent choices persist in `localStorage`.
 
 ### 9.4 Shell behaviour
+
+The header carries the change-project selector, the role selector, a currency selector (EUR · USD ·
+INR at illustrative rates, kept for the session; money is stored in euro and only the display
+converts) and the light/dark toggle.
 
 The main area is the only scroll container. Navigation resets it to the top; going back restores
 the previous offset from a per-location map. Pages are lazy-loaded with a skeleton that matches the
@@ -635,12 +639,17 @@ Ten systems and four outside finance services in three bands, nineteen interface
 counts, red borders where a check disagrees. A second view turns a plain-English rule into a query, runs it against live data and
 shows the rows.
 
-### Process Ontology (`/ontology`, `/ontology/agents`, `/coverage`)
+### Process Ontology (`/ontology`, `/ontology/objects`, `/ontology/agents`, `/coverage`)
 
 The swim-lane table per stage: who, the three SOP steps, system, data, rule tested, AI agents,
-tests, and the **live row count** for that stage's tables. An ontology graph view links workflow →
-stages → systems → data → agents. The Agents tab lists the eleven agents (reads → produces → works
-on). Coverage maps R1–R10 to the screens that prove them.
+tests, and the **live row count** for that stage's tables. **Business Objects** is the data model:
+eighteen objects down the left, and for the selected one its grain, primary key, every property
+with its meaning, source, type and status, a small graph of what it joins to, and where the data
+comes from — system, table, interface, live rows now, refresh and the checks that guard it. One
+large graph underneath shows all eighteen in four bands with the relation on every arrow.
+Objects and fields that still need a key user to agree the mapping are marked **To confirm**.
+The Agents tab lists the eleven agents (reads → produces → works on). Coverage maps the client's
+CORE-01…06 and ADV-01…04 to the screens that prove them.
 
 ### Process Discovery (`/discovery`, `/discovery/map`, `/discovery/compare`)
 
@@ -780,6 +789,7 @@ something: the corrected process map, a chosen project, a filtered interface lis
 
 | To add | Do this |
 |---|---|
+| A business object | One entry in `src/data/objects.ts`, plus its links. Business Objects picks it up. |
 | A menu item | One object in `src/app/nav.config.ts` plus a `<Route>` in `src/app/routes.tsx`. Sidebar, breadcrumb, palette, role guard and title follow automatically. |
 | A theme token | Add it to both blocks in `src/index.css` and to `tailwind.config.js`. |
 | A live check | A definition in `CHECK_DEFS` and a case in `runCheck` (`src/sim/checks.ts`). It appears on Live Checks, in the score and in the release criteria with no other change. |
