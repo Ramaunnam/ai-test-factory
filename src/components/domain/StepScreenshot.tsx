@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn'
+import { useMoney } from '@/lib/currency'
 
 export interface ScreenField {
   label: string
@@ -52,6 +53,7 @@ export function StepScreenshot({
   onClick?: () => void
   className?: string
 }) {
+  const { text } = useMoney()
   const body = (
     <div className={cn('overflow-hidden rounded-md border bg-surface text-left', OUTCOME_RING[outcome])}>
       {/* window chrome */}
@@ -100,7 +102,7 @@ export function StepScreenshot({
                   f.wrong ? 'font-semibold text-danger' : 'text-text',
                 )}
               >
-                {f.value}
+                {text(String(f.value))}
               </dd>
             </div>
           ))}

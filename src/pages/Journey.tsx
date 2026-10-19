@@ -17,10 +17,12 @@ import {
 import { useSim } from '@/sim/useSim'
 import { useToast } from '@/providers/ToastProvider'
 import { fmtSim, num } from '@/lib/format'
+import { useMoney } from '@/lib/currency'
 
 const PLAY_MS = 4000
 
 export function JourneyPage() {
+  const { money } = useMoney()
   const navigate = useNavigate()
   const toast = useToast()
   const [params, setParams] = useSearchParams()
@@ -200,7 +202,7 @@ export function JourneyPage() {
             : 'Nothing to fix for this truck.',
       8: invoice
         ? invoice.status === 'Posted'
-          ? `Invoice ${invoice.ext_invoice} posted for € ${num(Math.round(invoice.amount_eur))}${doc ? `, document copy ${doc.doc} archived` : ''}.`
+          ? `Invoice ${invoice.ext_invoice} posted for ${money(invoice.amount_eur)}${doc ? `, document copy ${doc.doc} archived` : ''}.`
           : `Invoice ${invoice.ext_invoice} parked: ${invoice.reason.toLowerCase()}. It cannot be signed off until that clears.`
         : 'The supplier invoice has not arrived yet; it usually follows 35 to 110 minutes later.',
     })

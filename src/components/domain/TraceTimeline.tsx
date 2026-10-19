@@ -2,6 +2,7 @@ import { ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Badge, Card, FieldGrid } from '@/components/ui'
 import { fmtSim } from '@/lib/format'
+import { useMoney } from '@/lib/currency'
 import type { TraceResult } from '@/sim/trace'
 import type { Message } from '@/sim/types'
 
@@ -30,6 +31,7 @@ function MessageHop({ m }: { m: Message }) {
 }
 
 export function TraceTimeline({ result }: { result: TraceResult }) {
+  const { text } = useMoney()
   if (!result.found) return null
 
   const hops = [...result.messages]
@@ -55,7 +57,13 @@ export function TraceTimeline({ result }: { result: TraceResult }) {
                 </div>
               </div>
               <div className="px-4 py-3">
-                <FieldGrid columns={3} fields={r.fields} />
+                <FieldGrid
+                  columns={3}
+                  fields={r.fields.map((f) => ({
+                    ...f,
+                    value: typeof f.value === 'string' ? text(f.value) : f.value,
+                  }))}
+                />
               </div>
             </Card>
           </div>

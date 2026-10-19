@@ -4,6 +4,7 @@ import { Check, ChevronDown, FolderGit2, HelpCircle, Menu, Monitor, Moon, Search
 import { cn } from '@/lib/cn'
 import { Badge, IconButton, SegmentedControl } from '@/components/ui'
 import { useTheme, type ThemeMode } from '@/providers/ThemeProvider'
+import { CURRENCIES, RATES_NOTE, currencyStore, useCurrency, type CurrencyCode } from '@/lib/currency'
 import { ROLES, useRole } from '@/providers/RoleProvider'
 import { ALL_PROJECTS, PROJECTS, useProjectFilter } from '@/data/projects'
 import { useToast } from '@/providers/ToastProvider'
@@ -22,6 +23,7 @@ export function Header({
   const navigate = useNavigate()
   const { mode, setMode } = useTheme()
   const { role, setRole } = useRole()
+  const currency = useCurrency()
   const toast = useToast()
   const [roleOpen, setRoleOpen] = useState(false)
   const roleRef = useRef<HTMLDivElement>(null)
@@ -253,6 +255,20 @@ export function Header({
           </div>
         )}
       </div>
+
+      <span className="hidden md:block" title={`Show every amount in this currency. ${RATES_NOTE}.`}>
+        <SegmentedControl<CurrencyCode>
+          ariaLabel="Currency"
+          size="sm"
+          value={currency.code}
+          onChange={(c) => currencyStore.set(c)}
+          options={CURRENCIES.map((c) => ({
+            value: c.code,
+            label: c.code,
+            title: `${c.name} \u00b7 ${RATES_NOTE}`,
+          }))}
+        />
+      </span>
 
       <SegmentedControl<ThemeMode>
         ariaLabel="Colour theme"

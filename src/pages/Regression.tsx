@@ -33,6 +33,7 @@ import { ALL_PROJECTS, projectOfSystem, useProjectFilter } from '@/data/projects
 import { useToast } from '@/providers/ToastProvider'
 import { useRole } from '@/providers/RoleProvider'
 import { fmtSim, num } from '@/lib/format'
+import { useMoney } from '@/lib/currency'
 
 const TABS = [
   { label: 'Change Impact', path: '/regression' },
@@ -486,6 +487,7 @@ function liveInvoiceRows(): ReconRow[] {
       const status: ReconRow['status'] = pay ? 'Match' : 'Missing'
       return {
         key: r.belnr,
+        // kept in euro like every other stored value; the table converts it
         source: `€ ${num(Math.round(r.amount_eur))}`,
         target: pay ? `€ ${num(Math.round(pay.amount_eur))}` : '—',
         status,
@@ -495,7 +497,11 @@ function liveInvoiceRows(): ReconRow[] {
           { field: 'external invoice', source: r.ext_invoice, target: null },
           { field: 'gate pass', source: r.gate_pass, target: null },
           { field: 'status in SAP', source: r.status, target: pay ? 'paid' : 'not in a payment file' },
-          { field: 'amount', source: Math.round(r.amount_eur), target: pay ? Math.round(pay.amount_eur) : null },
+          {
+            field: 'amount',
+            source: `€ ${num(Math.round(r.amount_eur))}`,
+            target: pay ? `€ ${num(Math.round(pay.amount_eur))}` : null,
+          },
           { field: 'posted', source: fmtSim(r.posted), target: pay ? fmtSim(pay.run_at) : null },
         ],
         reason: pay
@@ -533,6 +539,7 @@ function rowsFor(set: ReconSet): ReconRow[] {
 }
 
 export function ReconciliationPage() {
+  const { text } = useMoney()
   const navigate = useNavigate()
   const drawer = useDrawer()
   const version = useSimVersion()
@@ -610,10 +617,10 @@ export function ReconciliationPage() {
                         <tr key={f.field} className={cn('border-t border-line', differs && 'bg-danger-soft/50')}>
                           <td className="px-3 py-1.5 font-mono text-muted">{f.field}</td>
                           <td className="px-3 py-1.5 font-mono text-text">
-                            {f.source === null ? <span className="text-subtle">—</span> : String(f.source)}
+                            {f.source === null ? <span className="text-subtle">—</span> : text(String(f.source))}
                           </td>
                           <td className={cn('px-3 py-1.5 font-mono', differs ? 'font-semibold text-danger' : 'text-text')}>
-                            {f.target === null ? 'nothing on this side' : String(f.target)}
+                            {f.target === null ? 'nothing on this side' : text(String(f.target))}
                           </td>
                         </tr>
                       )
@@ -705,8 +712,8 @@ export function ReconciliationPage() {
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Source rows" value={num(set.sourceRows)} hint={set.source} />
         <StatTile label="Target rows" value={num(set.targetRows)} hint={set.target} tone={set.sourceRows === set.targetRows ? 'success' : 'danger'} />
-        <StatTile label="Source total" value={set.sourceTotal} />
-        <StatTile label="Target total" value={set.targetTotal} tone={set.sourceTotal === set.targetTotal ? 'success' : 'warning'} />
+        <StatTile label="Source total" value={text(set.sourceTotal)} />
+        <StatTile label="Target total" value={text(set.targetTotal)} tone={set.sourceTotal === set.targetTotal ? 'success' : 'warning'} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -732,8 +739,8 @@ export function ReconciliationPage() {
             rowTone={(r) => (r.status === 'Match' ? undefined : r.expected ? 'warning' : 'danger')}
             columns={[
               { key: 'key', header: 'Key', mono: true },
-              { key: 'source', header: 'Source', mono: true, align: 'right' },
-              { key: 'target', header: 'Target', mono: true, align: 'right' },
+              { key: 'source', header: 'Source', mono: true, align: 'right', render: (r) => text(String(r.source)) },
+              { key: 'target', header: 'Target', mono: true, align: 'right', render: (r) => text(String(r.target)) },
               {
                 key: 'status',
                 header: 'Status',

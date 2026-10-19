@@ -34,6 +34,7 @@ import { useDrawer } from '@/providers/DrawerProvider'
 import { useToast } from '@/providers/ToastProvider'
 import { useRole } from '@/providers/RoleProvider'
 import { num } from '@/lib/format'
+import { useMoney } from '@/lib/currency'
 
 const TABS = [
   { label: 'Scenarios', path: '/studio' },
@@ -386,6 +387,7 @@ interface GeneratedRow {
 }
 
 export function TestDataPage() {
+  const { money } = useMoney()
   const toast = useToast()
   const [entity, setEntity] = useState('Scrap batch with chemistry')
   const [count, setCount] = useState(20)
@@ -411,7 +413,7 @@ export function TestDataPage() {
               id: `45${String(90000000 + i)}`,
               entity: 'Purchase order',
               linked: `VEND-10${42 + (i % 4)} · SCRAP-STEEL-MIX`,
-              detail: `${num(20 + (i % 9) * 2)} t at € ${num(1850 + (i % 5) * 90)}/t`,
+              detail: `${num(20 + (i % 9) * 2)} t at ${money(1850 + (i % 5) * 90)}/t`,
             }
           }
           if (entity.startsWith('Gate pass')) {
