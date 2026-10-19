@@ -298,33 +298,6 @@ export function InterfacesPage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 lg:grid-cols-2">
-        <Card>
-          <CardBody className="flex gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary-soft text-primary">1</div>
-            <div>
-              <div className="text-sm font-semibold text-text">Test Studio tests a whole business journey</div>
-              <p className="mt-0.5 text-xs text-muted">
-                A truck arrives, is weighed, booked, invoiced and paid. One scenario, many systems, judged on the
-                business outcome.
-              </p>
-            </div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody className="flex gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-info-soft text-info">2</div>
-            <div>
-              <div className="text-sm font-semibold text-text">Interface Testing checks every handoff</div>
-              <p className="mt-0.5 text-xs text-muted">
-                One message, two systems, every field compared. It catches the kilogram sent as a tonne long before the
-                invoice is wrong.
-              </p>
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-
       {/* the filter bar ---------------------------------------------------- */}
       <Card className="mb-4">
         <CardHeader
