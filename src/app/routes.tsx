@@ -26,6 +26,7 @@ const JourneyPage = page(() => import('@/pages/Journey'), 'JourneyPage')
 const LandscapePage = page(() => import('@/pages/Landscape'), 'LandscapePage')
 const OntologyPage = page(ontology, 'OntologyPage')
 const AgentsPage = page(ontology, 'AgentsPage')
+const BusinessObjectsPage = page(ontology, 'BusinessObjectsPage')
 const CoveragePage = page(ontology, 'CoveragePage')
 const discovery = () => import('@/pages/Discovery')
 const DiscoveryPage = page(discovery, 'DiscoveryPage')
@@ -68,6 +69,7 @@ export function AppRoutes() {
         <Route path="/journey" element={<JourneyPage />} />
         <Route path="/landscape" element={<LandscapePage />} />
         <Route path="/ontology" element={<OntologyPage />} />
+        <Route path="/ontology/objects" element={<BusinessObjectsPage />} />
         <Route path="/ontology/agents" element={<AgentsPage />} />
         <Route path="/coverage" element={<CoveragePage />} />
         <Route path="/discovery" element={<DiscoveryPage />} />

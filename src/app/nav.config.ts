@@ -82,6 +82,7 @@ export const NAV: NavItem[] = [
     blurb: 'How each workflow is modelled, and which agent works where',
     tabs: [
       { label: 'Workflows', path: '/ontology' },
+      { label: 'Business Objects', path: '/ontology/objects' },
       { label: 'AI Agents', path: '/ontology/agents' },
       { label: 'Requirement Coverage', path: '/coverage' },
     ],

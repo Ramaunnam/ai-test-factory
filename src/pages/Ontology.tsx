@@ -1,6 +1,30 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle2, CircleAlert, Play, Workflow as WorkflowIcon } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  BadgeCheck,
+  Banknote,
+  Boxes,
+  Building2,
+  CheckCircle2,
+  CircleAlert,
+  ClipboardCheck,
+  FileText,
+  Flame,
+  FlaskConical,
+  Inbox,
+  Layers,
+  PackageCheck,
+  Play,
+  Printer,
+  ReceiptText,
+  Scale,
+  Ticket,
+  Truck,
+  Warehouse,
+  Workflow as WorkflowIcon,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   Badge,
@@ -11,7 +35,6 @@ import {
   Chip,
   DataTable,
   SectionTitle,
-  SegmentedControl,
   StatTile,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
@@ -25,6 +48,17 @@ import { HealthLegend, WorkflowFlow } from '@/components/domain/WorkflowFlow'
 import { AGENTS, PROCESSES, SCENARIOS, processById } from '@/data'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { TABLE_LABEL, tableCount, tableRoute } from '@/lib/live'
+import {
+  BUSINESS_OBJECTS,
+  OBJECT_BANDS,
+  OBJECT_LINKS,
+  neighboursOf,
+  objectById,
+  type BusinessObject,
+  type ObjStatus,
+} from '@/data/objects'
+import { engine } from '@/sim/engine'
+import { useSimVersion } from '@/sim/useSim'
 import type { TableName } from '@/sim/types'
 import { useStore } from '@/data/appStore'
 import { useThemeTokens } from '@/lib/useThemeTokens'
@@ -33,6 +67,7 @@ import { useToast } from '@/providers/ToastProvider'
 
 const TABS = [
   { label: 'Workflows', path: '/ontology' },
+  { label: 'Business Objects', path: '/ontology/objects' },
   { label: 'AI Agents', path: '/ontology/agents' },
   { label: 'Requirement Coverage', path: '/coverage' },
 ]
@@ -46,7 +81,6 @@ export function OntologyPage() {
   const toast = useToast()
   const store = useStore()
   const [params, setParams] = useSearchParams()
-  const [view, setView] = useState<'lanes' | 'graph'>('lanes')
 
   const processId = params.get('process') ?? 'P1'
   const process = processById(processId) ?? PROCESSES[0]
@@ -66,17 +100,6 @@ export function OntologyPage() {
         title="Process Ontology"
         subtitle="Every workflow written down once: who does it, in which system, against which rule, proven by which test."
         tabs={TABS}
-        actions={
-          <SegmentedControl
-            value={view}
-            onChange={setView}
-            ariaLabel="Ontology view"
-            options={[
-              { value: 'lanes', label: 'Swim lanes' },
-              { value: 'graph', label: 'Ontology graph' },
-            ]}
-          />
-        }
       />
 
       <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -114,8 +137,7 @@ export function OntologyPage() {
         </CardBody>
       </Card>
 
-      {view === 'lanes' ? (
-        <Card className="mb-4">
+      <Card className="mb-4">
           <CardHeader title="Stage by stage" subtitle="Who does it, how, in which system, against which rule, and how much data it holds today." />
           <DataTable
             rows={process.stages}
@@ -190,15 +212,7 @@ export function OntologyPage() {
               'Change Impact uses the same map to work out what a change touches.',
             ]}
           />
-        </Card>
-      ) : (
-        <Card className="mb-4">
-          <CardHeader title="Ontology graph" subtitle="Workflow → stages → systems → business data → AI agents." />
-          <div className="j2w-scroll overflow-x-auto p-4">
-            <OntologyGraph processId={process.id} />
-          </div>
-        </Card>
-      )}
+      </Card>
 
       {stage && (
         <Card tone="ai">
@@ -267,115 +281,6 @@ export function OntologyPage() {
         </Card>
       )}
     </>
-  )
-}
-
-function OntologyGraph({ processId }: { processId: string }) {
-  const t = useThemeTokens()
-  const [hover, setHover] = useState<string | null>(null)
-  const process = processById(processId) ?? PROCESSES[0]
-
-  const columns = useMemo(() => {
-    const stages = process.stages.map((s) => ({ id: s.id, label: s.name, parents: [process.id] }))
-    const systems = Array.from(new Set(process.stages.map((s) => s.system))).map((sys) => ({
-      id: `sys:${sys}`,
-      label: sys,
-      parents: process.stages.filter((s) => s.system === sys).map((s) => s.id),
-    }))
-    const data = Array.from(new Set(process.stages.flatMap((s) => s.data.split(', ')))).map((d) => ({
-      id: `data:${d}`,
-      label: d,
-      parents: process.stages.filter((s) => s.data.includes(d)).map((s) => `sys:${s.system}`),
-    }))
-    const agents = Array.from(new Set(process.stages.flatMap((s) => s.agents))).map((a) => ({
-      id: `agent:${a}`,
-      label: a,
-      parents: process.stages
-        .filter((s) => s.agents.includes(a))
-        .flatMap((s) => s.data.split(', ').map((d) => `data:${d}`)),
-    }))
-    return [
-      [{ id: process.id, label: process.name, parents: [] as string[] }],
-      stages,
-      systems,
-      data,
-      agents,
-    ]
-  }, [process])
-
-  const COL_W = 196
-  const NODE_H = 30
-  const GAP = 12
-  const height = Math.max(...columns.map((c) => c.length)) * (NODE_H + GAP) + 50
-  const width = COL_W * columns.length
-
-  const pos = new Map<string, { x: number; y: number }>()
-  columns.forEach((col, ci) => {
-    const colHeight = col.length * (NODE_H + GAP)
-    col.forEach((n, ri) => {
-      pos.set(n.id, { x: ci * COL_W + 10, y: (height - colHeight) / 2 + ri * (NODE_H + GAP) + 20 })
-    })
-  })
-
-  const titles = ['Workflow', 'Stages', 'Systems', 'Business data', 'AI agents']
-
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="min-w-[980px]">
-      {titles.map((title, i) => (
-        <text key={title} x={i * COL_W + 10} y={14} fontSize={10} fontWeight={600} letterSpacing={1} fill={t.subtle}>
-          {title.toUpperCase()}
-        </text>
-      ))}
-      {columns.flatMap((col) =>
-        col.flatMap((n) =>
-          n.parents.map((p) => {
-            const a = pos.get(p)
-            const b = pos.get(n.id)
-            if (!a || !b) return null
-            const active = hover === n.id || hover === p
-            return (
-              <path
-                key={`${p}->${n.id}`}
-                d={`M ${a.x + COL_W - 26} ${a.y + NODE_H / 2} C ${a.x + COL_W + 10} ${a.y + NODE_H / 2}, ${b.x - 30} ${b.y + NODE_H / 2}, ${b.x} ${b.y + NODE_H / 2}`}
-                fill="none"
-                stroke={active ? t.ai : t.line}
-                strokeWidth={active ? 1.8 : 1}
-                opacity={hover && !active ? 0.25 : 1}
-              />
-            )
-          }),
-        ),
-      )}
-      {columns.flatMap((col, ci) =>
-        col.map((n) => {
-          const p = pos.get(n.id)!
-          const active = hover === n.id
-          return (
-            <g
-              key={n.id}
-              onMouseEnter={() => setHover(n.id)}
-              onMouseLeave={() => setHover(null)}
-              className="cursor-default"
-              opacity={hover && !active && !columns.flat().find((x) => x.id === hover)?.parents.includes(n.id) ? 0.55 : 1}
-            >
-              <rect
-                x={p.x}
-                y={p.y}
-                width={COL_W - 36}
-                height={NODE_H}
-                rx={8}
-                fill={ci === 4 ? t['ai-soft'] : ci === 0 ? t['primary-soft'] : t.surface}
-                stroke={active ? t.ai : t.line}
-                strokeWidth={active ? 1.8 : 1}
-              />
-              <text x={p.x + 10} y={p.y + 19} fontSize={11} fill={t.text}>
-                {n.label.length > 22 ? `${n.label.slice(0, 21)}…` : n.label}
-              </text>
-            </g>
-          )
-        }),
-      )}
-    </svg>
   )
 }
 
@@ -522,5 +427,422 @@ export function CoveragePage() {
         ]}
       />
     </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Business objects                                                           */
+/* -------------------------------------------------------------------------- */
+
+const OBJECT_ICONS: Record<string, LucideIcon> = {
+  Truck,
+  Ticket,
+  Scale,
+  Building2,
+  FileText,
+  PackageCheck,
+  ReceiptText,
+  Banknote,
+  Printer,
+  Inbox,
+  Boxes,
+  FlaskConical,
+  BadgeCheck,
+  Warehouse,
+  ArrowLeftRight,
+  Flame,
+  ClipboardCheck,
+  Layers,
+}
+
+function StatusDot({ status }: { status: ObjStatus }) {
+  return (
+    <span
+      title={status}
+      className={cn('inline-block h-2 w-2 shrink-0 rounded-full', status === 'Confirmed' ? 'bg-success' : 'bg-accent')}
+    />
+  )
+}
+
+/** Rows held right now for an object, counted from the running plant. */
+function useLiveRows(): Record<string, number> {
+  const version = useSimVersion()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => {
+    const db = engine.db
+    const out: Record<string, number> = {}
+    BUSINESS_OBJECTS.forEach((o) => {
+      if (o.source.table) out[o.id] = tableCount(o.source.table)
+    })
+    out.vehicle = new Set(db.gate_pass.map((g) => g.vehicle)).size
+    out.vendor = new Set(db.EKPO.map((e) => e.vendor)).size
+    out.material = new Set(db.scrap_batch.map((b) => b.grade)).size
+    return out
+  }, [version])
+}
+
+export function BusinessObjectsPage() {
+  const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+  const rows = useLiveRows()
+  const selectedId = params.get('object') ?? BUSINESS_OBJECTS[0].id
+  const object = objectById(selectedId) ?? BUSINESS_OBJECTS[0]
+  const select = (id: string) => setParams({ object: id }, { replace: true })
+
+  const toConfirm = BUSINESS_OBJECTS.filter((o) => o.status === 'To confirm').length
+
+  return (
+    <>
+      <PageHeader
+        title="Process Ontology"
+        subtitle="The objects the landscape keeps, what each one is made of, and how they join up."
+        tabs={TABS}
+        actions={
+          <Badge tone={toConfirm ? 'warning' : 'success'}>
+            {toConfirm} of {BUSINESS_OBJECTS.length} still to confirm
+          </Badge>
+        }
+      />
+
+      <div className="mb-4 grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        {/* ------------------------------------------------------- the list */}
+        <Card className="self-start">
+          <CardHeader title="Business objects" />
+          <CardBody className="max-h-[720px] space-y-0.5 overflow-y-auto p-2 j2w-scroll">
+            {BUSINESS_OBJECTS.map((o) => {
+              const Icon = OBJECT_ICONS[o.icon] ?? Boxes
+              const active = o.id === object.id
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => select(o.id)}
+                  className={cn(
+                    'flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors',
+                    active ? 'bg-primary-soft text-text' : 'hover:bg-surface2',
+                  )}
+                >
+                  <Icon size={15} className={cn('mt-0.5 shrink-0', active ? 'text-primary' : 'text-subtle')} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-text">{o.name}</span>
+                    <span className="block truncate text-[11px] text-muted">{o.grain}</span>
+                  </span>
+                  <StatusDot status={o.status} />
+                </button>
+              )
+            })}
+          </CardBody>
+        </Card>
+
+        {/* ----------------------------------------------------- the detail */}
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHeader
+              title={object.name}
+              subtitle={object.what}
+              actions={
+                <span className="flex items-center gap-2">
+                  <Badge tone="neutral" mono>
+                    {object.technicalId}
+                  </Badge>
+                  <Badge tone={object.status === 'Confirmed' ? 'success' : 'warning'}>{object.status}</Badge>
+                </span>
+              }
+            />
+            <CardBody className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+                <div className="text-label font-semibold uppercase text-subtle">Grain</div>
+                <div className="mt-0.5 text-sm text-text">{object.grain}</div>
+              </div>
+              <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+                <div className="text-label font-semibold uppercase text-subtle">Primary key</div>
+                <div className="mt-0.5 font-mono text-sm text-text">{object.primaryKey}</div>
+              </div>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title="Properties" actions={<Badge tone="neutral">{object.properties.length} fields</Badge>} />
+            <DataTable
+              rows={object.properties}
+              rowKey={(f) => f.name}
+              dense
+              rowTone={(f) => (f.status === 'To confirm' ? 'warning' : undefined)}
+              columns={[
+                {
+                  key: 'name',
+                  header: 'Field',
+                  width: 200,
+                  render: (f) => (
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-[12px] text-text">{f.name}</span>
+                      {f.key && <Badge tone={f.key === 'PK' ? 'primary' : 'neutral'}>{f.key}</Badge>}
+                    </span>
+                  ),
+                },
+                { key: 'means', header: 'What it means' },
+                { key: 'from', header: 'Comes from', width: 250, mono: true },
+                { key: 'type', header: 'Type', width: 90 },
+                {
+                  key: 'status',
+                  header: '',
+                  width: 40,
+                  sortable: false,
+                  render: (f) => <StatusDot status={f.status} />,
+                },
+              ]}
+              empty="No fields recorded."
+            />
+          </Card>
+
+          <Card>
+            <CardHeader title="Connected to" subtitle="Press a neighbour to open it." />
+            <CardBody>
+              <NeighbourGraph object={object} onSelect={select} />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title="Where the data comes from" />
+            <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Fact label="System" value={object.source.system} />
+              <Fact label="Table" value={object.source.table ? TABLE_LABEL[object.source.table] : 'no table of its own'} mono />
+              <Fact
+                label="Interface"
+                value={object.source.interfaceId ?? 'none'}
+                mono
+                onClick={object.source.interfaceId ? () => navigate(`/interfaces?interface=${object.source.interfaceId}`) : undefined}
+              />
+              <Fact label="Live rows now" value={num(rows[object.id] ?? 0)} mono />
+              <Fact label="Refresh" value={object.source.refresh} />
+              <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
+                <div className="text-label font-semibold uppercase text-subtle">Checks that guard it</div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {object.source.checks.length === 0 ? (
+                    <span className="text-xs text-muted">none</span>
+                  ) : (
+                    object.source.checks.map((c) => (
+                      <Chip key={c} onClick={() => navigate('/flow/checks')}>
+                        {c}
+                      </Chip>
+                    ))
+                  )}
+                  <Badge tone={object.source.status === 'Confirmed' ? 'success' : 'warning'} className="ml-auto">
+                    {object.source.status}
+                  </Badge>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader
+          title="How everything connects"
+          subtitle="Hover an object to pick out its links. Press one to open it above."
+        />
+        <div className="j2w-scroll overflow-x-auto p-3">
+          <ObjectMap selectedId={object.id} onSelect={select} />
+        </div>
+      </Card>
+    </>
+  )
+}
+
+function Fact({
+  label,
+  value,
+  mono,
+  onClick,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+  onClick?: () => void
+}) {
+  const body = (
+    <>
+      <div className="text-label font-semibold uppercase text-subtle">{label}</div>
+      <div className={cn('mt-0.5 truncate text-sm text-text', mono && 'font-mono text-[12.5px]')}>{value}</div>
+    </>
+  )
+  if (!onClick) return <div className="min-w-0 rounded-md border border-line bg-surface2/60 px-3 py-2">{body}</div>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="min-w-0 rounded-md border border-line bg-surface2/60 px-3 py-2 text-left transition-colors hover:bg-surface2"
+    >
+      {body}
+    </button>
+  )
+}
+
+/** The selected object in the middle, everything joined to it around the edge. */
+function NeighbourGraph({ object, onSelect }: { object: BusinessObject; onSelect: (id: string) => void }) {
+  const t = useThemeTokens()
+  const list = neighboursOf(object.id)
+  const W = 860
+  const H = Math.max(210, 120 + list.length * 22)
+  const cx = W / 2
+  const cy = H / 2
+  const rx = W / 2 - 110
+  const ry = H / 2 - 34
+
+  if (!list.length) return <p className="text-sm text-muted">Nothing joins to this object yet.</p>
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="min-w-[640px]">
+      {list.map((n, i) => {
+        const angle = (i / list.length) * Math.PI * 2 - Math.PI / 2
+        const x = cx + Math.cos(angle) * rx
+        const y = cy + Math.sin(angle) * ry
+        const mx = (cx + x) / 2
+        const my = (cy + y) / 2
+        return (
+          <g key={n.link.from + n.link.to + n.other.id}>
+            <line x1={cx} y1={cy} x2={x} y2={y} stroke={t.line} strokeWidth={1.4} />
+            <rect x={mx - 48} y={my - 9} width={96} height={18} rx={9} fill={t.surface} stroke={t.line} />
+            <text x={mx} y={my + 4} fontSize={8.5} textAnchor="middle" fill={t.muted}>
+              {n.outgoing ? n.link.label : `${n.link.label} ←`}
+            </text>
+            <text x={mx} y={my + 17} fontSize={8} textAnchor="middle" fill={t.subtle} fontFamily="JetBrains Mono, monospace">
+              {n.link.cardinality}
+            </text>
+            <g className="cursor-pointer" onClick={() => onSelect(n.other.id)}>
+              <rect
+                x={x - 62}
+                y={y - 15}
+                width={124}
+                height={30}
+                rx={8}
+                fill={t.surface}
+                stroke={n.other.status === 'Confirmed' ? t['line-strong'] : t.accent}
+              />
+              <text x={x} y={y + 4} fontSize={10.5} textAnchor="middle" fill={t.text}>
+                {n.other.name.length > 18 ? `${n.other.name.slice(0, 17)}…` : n.other.name}
+              </text>
+            </g>
+          </g>
+        )
+      })}
+      <rect x={cx - 70} y={cy - 17} width={140} height={34} rx={9} fill={t['primary-soft']} stroke={t.primary} strokeWidth={1.6} />
+      <text x={cx} y={cy + 5} fontSize={11.5} fontWeight={600} textAnchor="middle" fill={t.primary}>
+        {object.name.length > 20 ? `${object.name.slice(0, 19)}…` : object.name}
+      </text>
+    </svg>
+  )
+}
+
+/** Every object at once, in four bands. */
+function ObjectMap({ selectedId, onSelect }: { selectedId: string; onSelect: (id: string) => void }) {
+  const t = useThemeTokens()
+  const [hover, setHover] = useState<string | null>(null)
+
+  const W = 1180
+  const BAND_H = 132
+  const H = OBJECT_BANDS.length * BAND_H + 24
+  const NODE_W = 132
+  const NODE_H = 34
+
+  const place = useMemo(() => {
+    const out: Record<string, { x: number; y: number }> = {}
+    OBJECT_BANDS.forEach((band, bi) => {
+      const inBand = BUSINESS_OBJECTS.filter((o) => o.band === band)
+      const gap = (W - 80) / inBand.length
+      inBand.forEach((o, i) => {
+        out[o.id] = { x: 40 + gap * i + gap / 2 - NODE_W / 2, y: 46 + bi * BAND_H }
+      })
+    })
+    return out
+  }, [])
+
+  const centre = (id: string) => {
+    const p = place[id]
+    return { x: p.x + NODE_W / 2, y: p.y + NODE_H / 2 }
+  }
+
+  const active = hover ?? selectedId
+  const lit = (id: string) =>
+    id === active || OBJECT_LINKS.some((l) => (l.from === active && l.to === id) || (l.to === active && l.from === id))
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} style={{ minWidth: W }}>
+      {OBJECT_BANDS.map((band, bi) => (
+        <g key={band}>
+          <rect
+            x={14}
+            y={22 + bi * BAND_H}
+            width={W - 28}
+            height={BAND_H - 16}
+            rx={12}
+            fill={t['surface-2']}
+            fillOpacity={0.5}
+            stroke={t.line}
+            strokeDasharray="6 6"
+          />
+          <text x={26} y={38 + bi * BAND_H} fontSize={10} fontWeight={600} letterSpacing={0.8} fill={t.subtle}>
+            {band.toUpperCase()}
+          </text>
+        </g>
+      ))}
+
+      {OBJECT_LINKS.map((l, i) => {
+        const a = centre(l.from)
+        const b = centre(l.to)
+        const on = l.from === active || l.to === active
+        const mx = (a.x + b.x) / 2
+        const my = (a.y + b.y) / 2 + ((i % 3) - 1) * 13
+        return (
+          <g key={`${l.from}-${l.to}-${l.label}`} opacity={on ? 1 : 0.28}>
+            <path
+              d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`}
+              fill="none"
+              stroke={on ? t.primary : t['line-strong']}
+              strokeWidth={on ? 1.8 : 1}
+            />
+            {on && (
+              <>
+                <rect x={mx - 52} y={my - 9} width={104} height={17} rx={8} fill={t.surface} stroke={t.line} />
+                <text x={mx} y={my + 3} fontSize={8.5} textAnchor="middle" fill={t.muted}>
+                  {l.label} {l.cardinality}
+                </text>
+              </>
+            )}
+          </g>
+        )
+      })}
+
+      {BUSINESS_OBJECTS.map((o) => {
+        const p = place[o.id]
+        const isActive = o.id === selectedId
+        return (
+          <g
+            key={o.id}
+            className="cursor-pointer"
+            opacity={lit(o.id) ? 1 : 0.4}
+            onMouseEnter={() => setHover(o.id)}
+            onMouseLeave={() => setHover(null)}
+            onClick={() => onSelect(o.id)}
+          >
+            <rect
+              x={p.x}
+              y={p.y}
+              width={NODE_W}
+              height={NODE_H}
+              rx={8}
+              fill={isActive ? t['primary-soft'] : t.surface}
+              stroke={isActive ? t.primary : o.status === 'Confirmed' ? t['line-strong'] : t.accent}
+              strokeWidth={isActive ? 1.8 : 1}
+            />
+            <circle cx={p.x + 11} cy={p.y + NODE_H / 2} r={3} fill={o.status === 'Confirmed' ? t.success : t.accent} />
+            <text x={p.x + 20} y={p.y + NODE_H / 2 + 4} fontSize={10.5} fill={isActive ? t.primary : t.text}>
+              {o.name.length > 19 ? `${o.name.slice(0, 18)}…` : o.name}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
   )
 }

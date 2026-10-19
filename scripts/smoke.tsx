@@ -91,6 +91,7 @@ const CASES: Case[] = [
   ['Command Centre / Framework & Pod', '/offer', '/offer', cc.OfferPage],
   ['Enterprise Map', '/landscape', '/landscape', landscape.LandscapePage],
   ['Ontology / Workflows', '/ontology', '/ontology', ontology.OntologyPage],
+  ['Ontology / Business Objects', '/ontology/objects', '/ontology/objects', ontology.BusinessObjectsPage],
   ['Ontology / Agents', '/ontology/agents', '/ontology/agents', ontology.AgentsPage],
   ['Ontology / Coverage', '/coverage', '/coverage', ontology.CoveragePage],
   ['Process Discovery', '/discovery', '/discovery', discovery.DiscoveryPage],
