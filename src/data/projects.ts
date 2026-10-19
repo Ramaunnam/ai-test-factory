@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 /**
@@ -91,13 +92,34 @@ export function projectOfProcess(process: string | null | undefined): string | u
   return PROCESS_PROJECT[process]
 }
 
+/**
+ * The project chosen in the header, remembered while the app is open. A page
+ * reached from the menu carries no query string of its own, so the choice is
+ * put back into the address bar as soon as that page renders.
+ */
+let chosenProject: string = ALL_PROJECTS
+
 /** The project filter, kept in the address bar so a view can be shared. */
 export function useProjectFilter() {
   const [params, setParams] = useSearchParams()
-  const projectId = params.get('project') ?? ALL_PROJECTS
+  const inUrl = params.get('project')
+  const projectId = inUrl ?? chosenProject
   const project = projectById(projectId)
 
+  useEffect(() => {
+    if (inUrl) {
+      chosenProject = inUrl
+      return
+    }
+    if (chosenProject === ALL_PROJECTS) return
+    const next = new URLSearchParams(params)
+    next.set('project', chosenProject)
+    setParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inUrl])
+
   const setProject = (id: string) => {
+    chosenProject = id || ALL_PROJECTS
     const next = new URLSearchParams(params)
     if (!id || id === ALL_PROJECTS) next.delete('project')
     else next.set('project', id)

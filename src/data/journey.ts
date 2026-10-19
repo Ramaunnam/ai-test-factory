@@ -293,6 +293,21 @@ export function stepsCovering(reqId: string): number[] {
   return JOURNEY_STEPS.filter((s) => s.requirements.some((r) => r.id === reqId)).map((s) => s.n)
 }
 
+/**
+ * The screens the journey points a requirement at, in step order, with no
+ * screen named twice. Used by Requirement Coverage and by Command Centre.
+ */
+export function screensForRequirement(reqId: string): { label: string; route: string }[] {
+  const out: { label: string; route: string }[] = []
+  JOURNEY_STEPS.forEach((step) => {
+    const req = step.requirements.find((r) => r.id === reqId)
+    if (!req) return
+    const opens = req.opens ?? step.opens
+    if (!out.some((o) => o.route === opens.route)) out.push(opens)
+  })
+  return out
+}
+
 /** How many of the client's requirements at least one step covers. */
 export function coveredRequirementCount(): number {
   return JOURNEY_REQUIREMENTS.filter((r) => stepsCovering(r.id).length > 0).length

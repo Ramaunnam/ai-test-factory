@@ -253,6 +253,32 @@ export function stageById(id: string) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* The close calendar                                                         */
+/* -------------------------------------------------------------------------- */
+
+export interface CloseMilestone {
+  day: number
+  label: string
+  detail: string
+}
+
+export const CLOSE_MILESTONES: CloseMilestone[] = [
+  { day: 22, label: 'Cut-off', detail: 'Posting period closes. Nothing new may enter the month.' },
+  { day: 23, label: 'Interface drain', detail: 'Every queue must reach zero. This is the step that fails at 5x today.' },
+  { day: 25, label: 'Reconciliation', detail: 'Stock, ledger and the yards are compared and the differences explained.' },
+  { day: 27, label: 'Close run', detail: 'The close is executed and the log reviewed.' },
+  { day: 31, label: 'Reporting', detail: 'The pack is published and signed off.' },
+]
+
+/** How long the freeze lasts today: the first milestone to the last, inclusive. */
+export function freezeDays(): number {
+  return CLOSE_MILESTONES[CLOSE_MILESTONES.length - 1].day - CLOSE_MILESTONES[0].day + 1
+}
+
+/** What we are aiming for instead. */
+export const FREEZE_TARGET_DAYS = 3
+
+/* -------------------------------------------------------------------------- */
 /* AI agents                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -278,30 +304,6 @@ export const AGENTS: Agent[] = [
   { id: 'A9', name: 'Load', group: 'Run', reads: 'Month-end volume profiles', produces: 'Throughput, p95 and backlog curves', worksOn: 'Month-End Load', route: '/load' },
   { id: 'A10', name: 'Access', group: 'Govern', reads: 'Roles, rules and user assignments', produces: 'Segregation of duty conflicts with proof', worksOn: 'Roles & SoD', route: '/access-sod' },
   { id: 'A11', name: 'Evidence', group: 'Govern', reads: 'Run results and approvals', produces: 'Locked, hashed evidence packs', worksOn: 'Evidence & Reports', route: '/evidence' },
-]
-
-/* -------------------------------------------------------------------------- */
-/* Requirements                                                               */
-/* -------------------------------------------------------------------------- */
-
-export interface Requirement {
-  id: string
-  title: string
-  provenBy: { label: string; route: string }[]
-  status: 'Proven' | 'Partly proven' | 'Open'
-}
-
-export const REQUIREMENTS: Requirement[] = [
-  { id: 'R1', title: 'Script generation from process discovery', status: 'Proven', provenBy: [{ label: 'Process Discovery', route: '/discovery' }, { label: 'Test Studio', route: '/studio' }] },
-  { id: 'R2', title: 'Positive, negative and regression tests', status: 'Proven', provenBy: [{ label: 'Test Studio', route: '/studio' }, { label: 'Change & Regression', route: '/regression' }] },
-  { id: 'R3', title: 'Audit-ready evidence', status: 'Proven', provenBy: [{ label: 'Evidence & Reports', route: '/evidence' }] },
-  { id: 'R4', title: 'AI generated test master data', status: 'Proven', provenBy: [{ label: 'Test Data', route: '/test-data' }] },
-  { id: 'R5', title: 'Integration and API testing', status: 'Partly proven', provenBy: [{ label: 'Interface Testing', route: '/interfaces' }, { label: 'Live Data Flow', route: '/flow' }] },
-  { id: 'R6', title: 'Month-end load testing', status: 'Partly proven', provenBy: [{ label: 'Month-End Load', route: '/load' }] },
-  { id: 'R7', title: 'Segregation of duty and role testing', status: 'Proven', provenBy: [{ label: 'Roles & SoD', route: '/access-sod' }] },
-  { id: 'R8', title: 'Data migration reconciliation', status: 'Partly proven', provenBy: [{ label: 'Migration Reconciliation', route: '/reconciliation' }] },
-  { id: 'R9', title: 'Self-healing scripts', status: 'Proven', provenBy: [{ label: 'Self-Healing', route: '/self-healing' }] },
-  { id: 'R10', title: 'One end-to-end framework', status: 'Proven', provenBy: [{ label: 'Command Centre', route: '/' }, { label: 'Enterprise Map', route: '/landscape' }] },
 ]
 
 /* -------------------------------------------------------------------------- */

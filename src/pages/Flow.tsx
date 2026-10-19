@@ -38,7 +38,7 @@ import { engine, FAULTS } from '@/sim/engine'
 import { runAllChecks, runCheck, checkSummary, type CheckResult } from '@/sim/checks'
 import { useSim, useSimVersion } from '@/sim/useSim'
 import { trace, traceSuggestions } from '@/sim/trace'
-import { SYSTEMS, SYSTEM_TABLES_BY_SYSTEM, interfaceById } from '@/data/flowHelpers'
+import { INTERFACES, SYSTEMS, SYSTEM_TABLES_BY_SYSTEM, interfaceById } from '@/data/flowHelpers'
 import { useProjectFilter } from '@/data/projects'
 import { fmtSim, num } from '@/lib/format'
 import { useDrawer } from '@/providers/DrawerProvider'
@@ -141,6 +141,10 @@ function useMessageDrawer() {
 /* -------------------------------------------------------------------------- */
 
 export function LiveFlowPage() {
+  /** Counted, so the tiles can never drift from the landscape. */
+  const simulatedSystems = SYSTEMS.filter((s) => s.sim).length
+  const liveInterfaces = INTERFACES.filter((i) => i.live).length
+
   const { engine: eng } = useSim()
   const navigate = useNavigate()
   const toast = useToast()
@@ -226,8 +230,19 @@ export function LiveFlowPage() {
       {/* KPIs */}
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <StatTile label="Vehicles through the gates" value={num(eng.counters.vehicles)} hint="last 24 simulated hours" onClick={() => navigate('/flow/data')} />
-        <StatTile label="Records in all systems" value={num(eng.recordCount())} hint="nine systems" onClick={() => navigate('/flow/data')} />
-        <StatTile label="Messages delivered" value={num(delivered)} tone="success" hint="across 9 live interfaces" onClick={() => navigate('/interfaces')} />
+        <StatTile
+          label="Records in all systems"
+          value={num(eng.recordCount())}
+          hint={`${simulatedSystems} systems`}
+          onClick={() => navigate('/flow/data')}
+        />
+        <StatTile
+          label="Messages delivered"
+          value={num(delivered)}
+          tone="success"
+          hint={`across ${liveInterfaces} live interfaces`}
+          onClick={() => navigate('/interfaces')}
+        />
         <StatTile label="In flight" value={num(inFlight.length)} tone="info" hint="moving on the map right now" />
         <StatTile label="Damaged, lost or doubled" value={num(damaged)} tone={damaged ? 'danger' : 'neutral'} hint="caused by the fault switches" />
         <StatTile
@@ -530,7 +545,7 @@ export function LiveChecksPage() {
       <JourneyBar step={6} />
       <PageHeader
         title="Live Checks"
-        subtitle="Nine rules written in business language, run against the real data in all nine systems."
+        subtitle={`${results.length} rules written in business language, run against the real data in all ${SYSTEMS.filter((s) => s.sim).length} systems.`}
         tabs={useFlowTabs(results)}
         actions={
           <>

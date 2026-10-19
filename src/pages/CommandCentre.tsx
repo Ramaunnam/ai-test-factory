@@ -23,7 +23,7 @@ import { JourneyBar } from '@/components/domain/JourneyBar'
 import { MultiLineChart } from '@/components/charts'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
-import { CHANGES, INTERFACES, PROCESSES, RUNS, SCENARIOS, SYSTEMS } from '@/data'
+import { CHANGES, CLOSE_MILESTONES, INTERFACES, PROCESSES, RUNS, SCENARIOS, SYSTEMS, freezeDays } from '@/data'
 import { useStore, type Finding } from '@/data/appStore'
 import { useChecks } from '@/sim/useSim'
 import { confidence } from '@/lib/score'
@@ -54,13 +54,7 @@ interface Criterion {
   route: string
 }
 
-const MILESTONES: { day: number; label: string; detail: string }[] = [
-  { day: 22, label: 'Cut-off', detail: 'Posting period closes. Nothing new may enter the month.' },
-  { day: 23, label: 'Interface drain', detail: 'Every queue must reach zero. This is the step that fails at 5x today.' },
-  { day: 25, label: 'Reconciliation', detail: 'Stock, ledger and the yards are compared and the differences explained.' },
-  { day: 27, label: 'Close run', detail: 'The close is executed and the log reviewed.' },
-  { day: 29, label: 'Reporting', detail: 'The pack is published and signed off.' },
-]
+const MILESTONES = CLOSE_MILESTONES
 
 export function ReleasePage() {
   const navigate = useNavigate()
@@ -173,7 +167,7 @@ export function ReleasePage() {
         <Card>
           <CardHeader
             title="Exit criteria"
-            subtitle="Five conditions, each computed from live data. The gate is GO only when all five are met."
+            subtitle={`${criteria.length} conditions, each computed from live data. The gate is GO only when all ${criteria.length} are met.`}
             actions={<Badge tone={unmet.length ? 'danger' : 'success'}>{unmet.length} outstanding</Badge>}
           />
           <CardBody className="space-y-2">
@@ -1356,7 +1350,7 @@ export function OfferPage() {
   const conf = confidence(input)
 
   /** Today's freeze window, read from the close calendar on Release & Close. */
-  const freezeToday = MILESTONES[MILESTONES.length - 1].day - MILESTONES[0].day + 1
+  const freezeToday = freezeDays()
   const processesWithTests = PROCESSES.filter((p) => SCENARIOS.some((s) => s.process === p.id)).length
   const automatedPct = Math.round((processesWithTests / PROCESSES.length) * 100)
   const packs = store.evidencePacks.filter((p) => p.locked).length

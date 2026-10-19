@@ -15,8 +15,14 @@ import {
   StatTile,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
+import {
+  JOURNEY_REQUIREMENTS,
+  coveredRequirementCount,
+  screensForRequirement,
+  stepsCovering,
+} from '@/data/journey'
 import { HealthLegend, WorkflowFlow } from '@/components/domain/WorkflowFlow'
-import { AGENTS, PROCESSES, REQUIREMENTS, SCENARIOS, processById } from '@/data'
+import { AGENTS, PROCESSES, SCENARIOS, processById } from '@/data'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { TABLE_LABEL, tableCount, tableRoute } from '@/lib/live'
 import type { TableName } from '@/sim/types'
@@ -437,47 +443,84 @@ export function AgentsPage() {
 
 export function CoveragePage() {
   const navigate = useNavigate()
-  const proven = REQUIREMENTS.filter((r) => r.status === 'Proven').length
+  const core = JOURNEY_REQUIREMENTS.filter((r) => r.group === 'Core').length
+  const covered = coveredRequirementCount()
 
   return (
     <>
       <PageHeader
         title="Requirement Coverage"
-        subtitle="The ten requirements behind this programme, and the screen that proves each one."
+        subtitle="The ten requirements you set, the journey steps that cover each one, and the screen that proves it."
         tabs={TABS}
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Requirements" value={num(REQUIREMENTS.length)} />
-        <StatTile label="Proven" value={num(proven)} tone="success" />
-        <StatTile label="Partly proven" value={num(REQUIREMENTS.length - proven)} tone="warning" />
-        <StatTile label="Scenarios tied to them" value={num(SCENARIOS.length)} onClick={() => navigate('/studio')} />
+        <StatTile label="Requirements" value={num(JOURNEY_REQUIREMENTS.length)} />
+        <StatTile label="Core" value={num(core)} tone="primary" />
+        <StatTile label="Advanced" value={num(JOURNEY_REQUIREMENTS.length - core)} tone="info" />
+        <StatTile
+          label="Covered by a journey step"
+          value={num(covered)}
+          tone={covered === JOURNEY_REQUIREMENTS.length ? 'success' : 'warning'}
+          onClick={() => navigate('/journey')}
+        />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        {REQUIREMENTS.map((r) => (
-          <Card key={r.id} tone={r.status === 'Proven' ? 'success' : 'warning'}>
-            <CardBody>
-              <div className="mb-2 flex items-center gap-2">
-                <Badge tone={r.status === 'Proven' ? 'success' : 'warning'} mono>
-                  {r.id}
-                </Badge>
-                <span className="text-sm font-medium text-text">{r.title}</span>
-              </div>
-              <div className="mb-2 text-xs text-muted">
-                Covered by {SCENARIOS.filter((s) => s.requirement === r.id).length} scenarios.
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {r.provenBy.map((p) => (
-                  <Chip key={p.route} onClick={() => navigate(p.route)}>
-                    {p.label}
-                  </Chip>
-                ))}
-              </div>
-            </CardBody>
-          </Card>
-        ))}
+        {JOURNEY_REQUIREMENTS.map((r) => {
+          const steps = stepsCovering(r.id)
+          const screens = screensForRequirement(r.id)
+          return (
+            <Card key={r.id} tone={steps.length ? 'success' : 'warning'}>
+              <CardBody>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Badge tone={steps.length ? 'success' : 'warning'} mono>
+                    {r.id}
+                  </Badge>
+                  <span className="text-sm font-medium text-text">{r.short}</span>
+                  <Badge tone={r.group === 'Core' ? 'primary' : 'info'} className="ml-auto">
+                    {r.group}
+                  </Badge>
+                </div>
+                <p className="mb-2 text-xs text-muted">{r.full}</p>
+                <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-label font-semibold uppercase text-subtle">Covered by</span>
+                  {steps.length === 0 ? (
+                    <span className="text-xs text-muted">no journey step yet</span>
+                  ) : (
+                    steps.map((n) => (
+                      <Chip key={n} onClick={() => navigate(`/journey?step=${n}`)}>
+                        Step {n}
+                      </Chip>
+                    ))
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-label font-semibold uppercase text-subtle">Proven on</span>
+                  {screens.map((sc) => (
+                    <Chip key={sc.route} onClick={() => navigate(sc.route)}>
+                      {sc.label}
+                    </Chip>
+                  ))}
+                </div>
+              </CardBody>
+            </Card>
+          )
+        })}
       </div>
+
+      <SourceNote
+        title="Where this list comes from"
+        reads={[{ label: 'The Testing Journey', route: '/journey', note: 'the same ten requirements and the same screens' }]}
+        computes="reads each journey step, collects the requirements it covers and the screen each one opens"
+        feeds={[{ label: 'Testing Journey', route: '/journey' }]}
+        steps={[
+          'The requirements are the ones you set: six core and four advanced.',
+          'A step covers a requirement when it says so, in one sentence, on the Testing Journey.',
+          'A requirement opens the screen named against it, or the step\u2019s own screen when it names none.',
+          'Nothing here is kept in a second place, so the two pages can never disagree.',
+        ]}
+      />
     </>
   )
 }

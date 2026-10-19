@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Activity,
@@ -28,7 +28,8 @@ import { PageHeader } from '@/app/PageHeader'
 import { FindingsBar, TrendChart } from '@/components/charts'
 import { HealthLegend } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
-import { PROCESSES, REQUIREMENTS, RUNS, SCENARIOS, TREND_30_DAYS, type StageHealth } from '@/data'
+import { FREEZE_TARGET_DAYS, PROCESSES, RUNS, SCENARIOS, TREND_30_DAYS, freezeDays, type StageHealth } from '@/data'
+import { JOURNEY_REQUIREMENTS, screensForRequirement, stepsCovering } from '@/data/journey'
 import { useStore } from '@/data/appStore'
 import { ALL_PROJECTS, PROJECTS, projectOfSystem, projectOfSystems, useProjectFilter } from '@/data/projects'
 import { useChecks, useSim } from '@/sim/useSim'
@@ -36,8 +37,9 @@ import { confidence } from '@/lib/score'
 import { useConfidenceInput, scoreIf } from '@/lib/useConfidenceInput'
 import { interfaceStats } from '@/lib/interfaceStats'
 import { interfaceTraffic, plantPulse, systemActivity } from '@/lib/live'
-import { fmtSim, num } from '@/lib/format'
+import { fmtSim, num, plural } from '@/lib/format'
 import { useDrawer } from '@/providers/DrawerProvider'
+import { useToast } from '@/providers/ToastProvider'
 
 const TABS = [
   { label: 'Health', path: '/' },
@@ -69,9 +71,18 @@ const HEALTH_TONE: Record<StageHealth, 'success' | 'warning' | 'danger' | 'neutr
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+/** "18 Oct 2026 02:00" becomes "Tonight 02:00"; anything without a clock stays blank. */
+function shortWhen(s: { nextRun: string; nextInMinutes: number }) {
+  const time = s.nextRun.match(/\b(\d{2}:\d{2})$/)?.[1]
+  if (!time) return ''
+  if (s.nextInMinutes <= 24 * 60 && Number(time.slice(0, 2)) < 5) return `Tonight ${time}`
+  return time
+}
+
 export function HealthPage() {
   const navigate = useNavigate()
   const drawer = useDrawer()
+  const toast = useToast()
   const store = useStore()
   const checks = useChecks()
   const { engine } = useSim()
@@ -185,7 +196,7 @@ export function HealthPage() {
       {/* ---------------------------------------------------------------- */}
       {/* the projects running at the same time                              */}
       {/* ---------------------------------------------------------------- */}
-      <Card className="mb-4">
+      <Card>
         <CardHeader
           title="Projects"
           subtitle="Three change projects are running at once. Pick one in the header and the whole factory follows it."
@@ -195,7 +206,7 @@ export function HealthPage() {
             </Badge>
           }
         />
-        <CardBody className="grid gap-3 lg:grid-cols-3">
+        <CardBody className="divide-y divide-line py-0">
           {PROJECTS.map((p) => {
             const scenarios = SCENARIOS.filter((s) => projectOfSystems(s.systems) === p.id).length
             const open = store.findings.filter((f) => f.status !== 'Closed' && projectOfSystem(f.system) === p.id)
@@ -203,65 +214,58 @@ export function HealthPage() {
             const schedules = store.schedules.filter((s) => s.project === p.id && s.on).length
             const selected = projectFilter.projectId === p.id
             return (
-              <button
+              <div
                 key={p.id}
-                type="button"
-                onClick={() => projectFilter.setProject(selected ? ALL_PROJECTS : p.id)}
                 className={cn(
-                  'rounded-md border px-3 py-2.5 text-left transition-colors',
-                  selected ? 'border-primary bg-primary-soft/50' : 'border-line hover:bg-surface2',
+                  'flex flex-wrap items-center gap-x-3 gap-y-1 px-1 py-2',
+                  selected && 'bg-primary-soft/40',
                 )}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-text">{p.name}</span>
-                  <Badge tone={criticalsHere ? 'danger' : open.length ? 'warning' : 'success'} className="ml-auto">
-                    {criticalsHere ? `${criticalsHere} critical` : open.length ? `${open.length} open` : 'clean'}
-                  </Badge>
-                </div>
-                <p className="mt-0.5 text-xs text-muted">{p.blurb}</p>
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-subtle">
-                  <span>{num(scenarios)} scenarios</span>
-                  <span>{num(schedules)} schedules on</span>
-                  <span>{p.release}</span>
-                </div>
-              </button>
+                <span className="text-sm font-medium text-text">{p.name}</span>
+                <Badge tone={criticalsHere ? 'danger' : open.length ? 'warning' : 'success'}>
+                  {criticalsHere ? `${criticalsHere} critical` : open.length ? `${open.length} open` : 'clean'}
+                </Badge>
+                <span className="font-mono text-[11px] text-subtle">{num(scenarios)} scenarios</span>
+                <span className="font-mono text-[11px] text-subtle">{plural(schedules, 'schedule on', 'schedules on')}</span>
+                <span className="font-mono text-[11px] text-subtle">{p.release}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    projectFilter.setProject(p.id)
+                    toast({ title: `Showing project: ${p.name}`, tone: 'info' })
+                    navigate(`/run?project=${p.id}`)
+                  }}
+                  className="ml-auto rounded-sm text-xs font-medium text-primary transition-colors hover:underline"
+                  title={`Show ${p.name} in the Run Centre`}
+                >
+                  View →
+                </button>
+              </div>
             )
           })}
         </CardBody>
-        <CardBody className="border-t border-line pt-3">
-          <div className="mb-2 text-label font-semibold uppercase text-subtle">The next three runs</div>
-          <div className="grid gap-2 lg:grid-cols-3">
-            {nextRuns.length === 0 ? (
-              <p className="text-sm text-muted">Every schedule is switched off, so nothing will run on its own.</p>
-            ) : (
-              nextRuns.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => navigate('/run/schedules')}
-                  className="rounded-md border border-line px-3 py-2 text-left transition-colors hover:bg-surface2"
-                >
-                  <div className="text-xs font-medium text-text">{s.name}</div>
-                  <div className="truncate text-[11px] text-muted">{s.what}</div>
-                  <div className="mt-0.5 font-mono text-[11px] text-subtle">{s.nextRun}</div>
-                </button>
-              ))
-            )}
-          </div>
-        </CardBody>
-        <SourceNote
-          title="Where the project split comes from"
-          reads={[
-            { label: 'Projects', note: 'the systems each change project owns' },
-            { label: 'Scenarios, findings and schedules', route: '/studio' },
-          ]}
-          computes="everything is assigned to the project that owns the system it lands in, so one project can be looked at on its own"
-          feeds={[
-            { label: 'Run Centre \u2192 Schedules', route: '/run/schedules' },
-            { label: 'Change & Regression', route: '/regression' },
-          ]}
-        />
       </Card>
+
+      <p className="mb-4 mt-1.5 px-1 text-xs text-muted">
+        Next runs:{' '}
+        {nextRuns.length === 0
+          ? 'nothing is scheduled'
+          : nextRuns.map((s, i) => (
+              <Fragment key={s.id}>
+                {i > 0 && ' · '}
+                {s.name}
+                {shortWhen(s) && <span className="text-subtle"> {shortWhen(s)}</span>}
+              </Fragment>
+            ))}{' '}
+        —{' '}
+        <button
+          type="button"
+          onClick={() => navigate('/run/schedules')}
+          className="rounded-sm font-medium text-primary transition-colors hover:underline"
+        >
+          see Schedules →
+        </button>
+      </p>
 
       {/* ---------------------------------------------------------------- */}
       {/* the plant, live                                                    */}
@@ -297,7 +301,7 @@ export function HealthPage() {
           <StatTile
             label="Records created in the last hour"
             value={num(pulse.recordsLastHour)}
-            hint={`${num(pulse.records)} held across nine systems`}
+            hint={`${num(pulse.records)} held across ${systems.length} systems`}
             onClick={() => navigate('/flow/data')}
           />
           <StatTile
@@ -505,7 +509,7 @@ export function HealthPage() {
         <Card>
           <CardHeader
             title="Records produced in the last hour"
-            subtitle="Nine systems, measured over the last simulated hour."
+            subtitle={`${systems.length} systems, measured over the last simulated hour.`}
             actions={<Badge tone="neutral">{num(pulse.recordsLastHour)} rows</Badge>}
           />
           <CardBody className="space-y-2">
@@ -593,18 +597,18 @@ export function HealthPage() {
         <Card>
           <CardHeader
             title="Month-end readiness"
-            subtitle="Freeze takes 10 days today. The target is 3."
+            subtitle={`Freeze takes ${freezeDays()} days today. The target is ${FREEZE_TARGET_DAYS}.`}
             actions={<Button size="sm" onClick={() => navigate('/release')}>Release & Close</Button>}
           />
           <CardBody className="space-y-3">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <div className="font-mono text-2xl font-semibold text-text">10 days</div>
+                <div className="font-mono text-2xl font-semibold text-text">{freezeDays()} days</div>
                 <div className="text-xs text-muted">current freeze window</div>
               </div>
               <TrendingDown size={18} className="mb-2 text-subtle" />
               <div className="text-right">
-                <div className="font-mono text-2xl font-semibold text-success">3 days</div>
+                <div className="font-mono text-2xl font-semibold text-success">{FREEZE_TARGET_DAYS} days</div>
                 <div className="text-xs text-muted">target by R-2026.11</div>
               </div>
             </div>
@@ -717,25 +721,27 @@ export function HealthPage() {
         <Card>
           <CardHeader title="Requirements proven" subtitle="Each tile opens the screen that proves it." />
           <CardBody className="grid gap-2 sm:grid-cols-2">
-            {REQUIREMENTS.map((r) => {
-              const covering = SCENARIOS.filter((s) => s.requirement === r.id).length
+            {JOURNEY_REQUIREMENTS.map((r) => {
+              const steps = stepsCovering(r.id)
+              const screens = screensForRequirement(r.id)
               return (
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => navigate(r.provenBy[0].route)}
+                  onClick={() => navigate(screens[0]?.route ?? '/journey')}
                   className="flex items-start gap-2 rounded-md border border-line bg-surface px-3 py-2 text-left transition-[transform,box-shadow] duration-[120ms] hover:-translate-y-px hover:shadow-md"
                 >
-                  {r.status === 'Proven' ? (
+                  {steps.length ? (
                     <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-success" />
                   ) : (
                     <CircleAlert size={15} className="mt-0.5 shrink-0 text-accent" />
                   )}
                   <span className="min-w-0">
                     <span className="block font-mono text-[11px] text-subtle">{r.id}</span>
-                    <span className="block truncate text-xs text-text">{r.title}</span>
-                    <span className="block text-[11px] text-subtle">
-                      {covering} {covering === 1 ? 'scenario' : 'scenarios'} · proven on {r.provenBy[0].label}
+                    <span className="block truncate text-xs text-text">{r.short}</span>
+                    <span className="block truncate text-[11px] text-subtle">
+                      {steps.length} {steps.length === 1 ? 'step' : 'steps'} · proven on{' '}
+                      {screens[0]?.label ?? 'the Testing Journey'}
                     </span>
                   </span>
                 </button>

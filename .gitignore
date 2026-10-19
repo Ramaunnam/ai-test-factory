@@ -6,3 +6,6 @@ dist-ssr
 .vite
 .selftest.mjs
 .smoke.mjs
+
+# internal only, never pushed
+docs/PLAYBOOK-client-names.md
