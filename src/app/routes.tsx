@@ -54,6 +54,7 @@ const FindingPage = page(reports, 'FindingPage')
 const RunReportPage = page(reports, 'RunReportPage')
 const ReleaseReportPage = page(reports, 'ReleaseReportPage')
 const EvidencePackPage = page(reports, 'EvidencePackPage')
+const StudioReviewPage = page(reports, 'StudioReviewPage')
 const NotFoundPage = page(misc, 'NotFoundPage')
 const KitchenSinkPage = page(misc, 'KitchenSinkPage')
 
@@ -102,6 +103,7 @@ export function AppRoutes() {
       <Route path="/report/:runId" element={<RunReportPage />} />
       <Route path="/release-report/:id" element={<ReleaseReportPage />} />
       <Route path="/evidence-pack/:runId" element={<EvidencePackPage />} />
+      <Route path="/studio-review" element={<StudioReviewPage />} />
     </Routes>
   )
 }

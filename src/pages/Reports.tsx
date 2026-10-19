@@ -2,13 +2,15 @@ import type { ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { Badge, Button, Card, CardBody, CardHeader, DataTable, FieldGrid } from '@/components/ui'
+import { Badge, Button, Card, CardBody, CardHeader, DataTable, FieldGrid, StatTile } from '@/components/ui'
 import { CHANGES, PROCESSES, RUNS, SCENARIOS } from '@/data'
 import { RUN_LOG_COUNT, RUN_STEPS } from '@/data/runSteps'
 import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { store, useStore } from '@/data/appStore'
 import { WorkflowFlow } from '@/components/domain/WorkflowFlow'
 import { num } from '@/lib/format'
+import { studioReview } from '@/lib/studioReview'
+import { useChecks } from '@/sim/useSim'
 
 function ReportShell({
   title,
@@ -451,6 +453,98 @@ export function EvidencePackPage() {
           </CardBody>
         </Card>
       )}
+    </ReportShell>
+  )
+}
+
+export function StudioReviewPage() {
+  const appState = useStore()
+  const checks = useChecks()
+  const scenarios = [...appState.recordedScenarios, ...SCENARIOS]
+  const r = studioReview({
+    scenarios,
+    scenarioStatus: appState.scenarioStatus,
+    findings: appState.findings,
+    checks,
+    runs: appState.runs,
+  })
+
+  return (
+    <ReportShell
+      title="AI review of the test suite"
+      subtitle={`Every workflow, read from the scenario library and the live plant · ${new Date().toLocaleString('en-GB')}`}
+      badge={
+        <Badge tone={r.coverage >= 80 ? 'success' : r.coverage >= 60 ? 'warning' : 'danger'}>
+          {r.coverage} % stage coverage
+        </Badge>
+      }
+    >
+      <Card className="mb-4">
+        <CardHeader title="Summary" />
+        <CardBody className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile label="Stage coverage" value={`${r.coverage} %`} hint={`${r.tested} of ${r.stages} stages`} />
+          <StatTile
+            label="Scenarios"
+            value={num(r.total)}
+            hint={`${r.byType.Positive} positive · ${r.byType.Negative} negative · ${r.byType.Regression} re-test`}
+          />
+          <StatTile label="Approved" value={num(r.approved)} hint={`${r.pending} pending approval`} />
+          <StatTile label="Last run" value={r.lastRun.verdict} hint={`${r.lastRun.id} · ${r.lastRun.failed} failed`} />
+        </CardBody>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader title="Workflow by workflow" />
+        <DataTable
+          rows={r.workflows}
+          rowKey={(w) => w.id}
+          dense
+          columns={[
+            { key: 'id', header: 'Workflow', mono: true, width: 70 },
+            { key: 'name', header: 'Name' },
+            { key: 'coverage', header: 'Coverage', width: 95, align: 'right', render: (w) => `${w.coverage} %` },
+            { key: 'untested', header: 'Stages with no test', render: (w) => (w.untested.length ? w.untested.join(', ') : 'none') },
+            { key: 'failingChecks', header: 'Failing checks', width: 130, render: (w) => (w.failingChecks.length ? w.failingChecks.join(', ') : 'none') },
+            { key: 'openFindings', header: 'Findings', width: 90, align: 'right', mono: true },
+            { key: 'risk', header: 'Risk', width: 80 },
+          ]}
+          empty="No workflows."
+        />
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader title="Gaps, and the scenarios we would add" />
+        <DataTable
+          rows={r.gaps}
+          rowKey={(g) => g.id}
+          dense
+          columns={[
+            { key: 'workflow', header: 'Workflow', width: 180 },
+            { key: 'stage', header: 'Stage', width: 160 },
+            { key: 'type', header: 'Type', width: 95 },
+            { key: 'name', header: 'Scenario to add' },
+            { key: 'why', header: 'Why', width: 220 },
+          ]}
+          empty="No gaps. Every stage has a scenario and no check is failing."
+        />
+      </Card>
+
+      <Card>
+        <CardHeader title="Requirement coverage" />
+        <DataTable
+          rows={r.requirements}
+          rowKey={(q) => q.id}
+          dense
+          columns={[
+            { key: 'id', header: 'Id', mono: true, width: 90 },
+            { key: 'group', header: 'Group', width: 90 },
+            { key: 'full', header: 'What you asked for' },
+            { key: 'steps', header: 'Journey steps', width: 130, render: (q) => (q.steps.length ? q.steps.join(', ') : 'none') },
+            { key: 'screens', header: 'Proven on', render: (q) => q.screens.map((sc) => sc.label).join(' · ') },
+          ]}
+          empty="No requirements."
+        />
+      </Card>
     </ReportShell>
   )
 }

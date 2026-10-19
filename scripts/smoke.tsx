@@ -120,6 +120,7 @@ const CASES: Case[] = [
   ['Run report', '/report/:runId', '/report/RUN-1042', reports.RunReportPage],
   ['Release report', '/release-report/:id', '/release-report/R-2026.10', reports.ReleaseReportPage],
   ['Evidence pack', '/evidence-pack/:runId', '/evidence-pack/RUN-1042', reports.EvidencePackPage],
+  ['Studio AI review', '/studio-review', '/studio-review', reports.StudioReviewPage],
   ['404', '*', '/nope', misc.NotFoundPage],
   ['Design system', '/kitchen-sink', '/kitchen-sink', misc.KitchenSinkPage],
 ]

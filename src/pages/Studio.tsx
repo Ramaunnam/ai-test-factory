@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, CircleDot, Database, MonitorPlay, Play, Search, Sparkles, Square, X } from 'lucide-react'
+import { Check, CircleDot, Database, MonitorPlay, Play, Printer, Search, Sparkles, Square, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   Badge,
@@ -34,6 +34,8 @@ import { useDrawer } from '@/providers/DrawerProvider'
 import { useToast } from '@/providers/ToastProvider'
 import { useRole } from '@/providers/RoleProvider'
 import { num } from '@/lib/format'
+import { REVIEW_LINES, scenariosFromGaps, studioReview } from '@/lib/studioReview'
+import { useChecks } from '@/sim/useSim'
 import { useMoney } from '@/lib/currency'
 
 const TABS = [
@@ -43,52 +45,6 @@ const TABS = [
   { label: 'Record', path: '/studio/record' },
 ]
 
-const GENERATED: Scenario[] = [
-  {
-    id: 'SC-031',
-    name: 'Weighbridge message without a unit is rejected',
-    process: 'P1',
-    stageId: 'P1-S2',
-    type: 'Negative',
-    requirement: 'R5',
-    systems: ['Yard Management', 'SAP S/4HANA – Steel'],
-    lastResult: 'Not run',
-    steps: [
-      { n: 1, text: 'Send a weighbridge ticket with the unit field empty', technical: "payload.unit = ''", system: 'Yard Management' },
-      { n: 2, text: 'Expect SAP to refuse the message rather than guess', technical: 'expect(response.status).toBe(422)', system: 'SAP S/4HANA – Steel' },
-      { n: 3, text: 'Expect no goods receipt to exist for that gate pass', technical: 'expect(mseg).toHaveLength(0)', system: 'SAP S/4HANA – Steel' },
-    ],
-  },
-  {
-    id: 'SC-032',
-    name: 'Quantity below one tonne is challenged before posting',
-    process: 'P1',
-    stageId: 'P1-S2',
-    type: 'Negative',
-    requirement: 'R5',
-    systems: ['SAP S/4HANA – Steel'],
-    lastResult: 'Not run',
-    steps: [
-      { n: 1, text: 'Post a goods receipt of 21.92 KG against a 24 t purchase order', technical: 'sap.post(gr, 21.92)', system: 'SAP S/4HANA – Steel' },
-      { n: 2, text: 'Expect a plausibility warning before the document is created', technical: "expect(message).toContain('plausibility')", system: 'SAP S/4HANA – Steel' },
-    ],
-  },
-  {
-    id: 'SC-033',
-    name: 'Chemistry rule: molybdenum present for every 316L batch',
-    process: 'P2',
-    stageId: 'P2-S3',
-    type: 'Regression',
-    requirement: 'R2',
-    systems: ['Laboratory app', 'Scrap Yard Operations'],
-    lastResult: 'Not run',
-    steps: [
-      { n: 1, text: 'Read every batch of grade SCR-316L-SOLID from the last 24 hours', technical: "select * from scrap_batch where grade = 'SCR-316L-SOLID'", system: 'Scrap Yard Operations' },
-      { n: 2, text: 'Join the chemistry record for each batch', technical: 'join chemistry on chemistry.batch = scrap_batch.batch', system: 'Scrap Yard Operations' },
-      { n: 3, text: 'Expect molybdenum to be present and within the grade window', technical: 'expect(mo_pct).toBeGreaterThan(1.8)', system: 'Scrap Yard Operations' },
-    ],
-  },
-]
 
 export function StudioPage() {
   const navigate = useNavigate()
@@ -97,10 +53,12 @@ export function StudioPage() {
   const appState = useStore()
   const { def } = useRole()
   const [params, setParams] = useSearchParams()
-  const [processId, setProcessId] = useState('P1')
+  const [selected, setSelected] = useState<string[]>(['P1'])
   const [phase, setPhase] = useState<'idle' | 'running' | 'done'>('idle')
+  const [review, setReview] = useState<'idle' | 'running' | 'done'>('idle')
   const [generated, setGenerated] = useState<Scenario[]>([])
   const [rule, setRule] = useState(false)
+  const checks = useChecks()
 
   const scenarioProject = useProjectFilter()
   const all = useMemo(
@@ -108,11 +66,31 @@ export function StudioPage() {
     [generated, appState.recordedScenarios],
   )
   const forProcess = all
-    .filter((s) => s.process === processId)
+    .filter((s) => selected.includes(s.process))
     .filter((s) => scenarioProject.matches(projectOfSystems(s.systems)))
 
+  /** The whole library, for a review that is about all of it. */
+  const reviewed = useMemo(
+    () =>
+      studioReview({
+        scenarios: all,
+        scenarioStatus: appState.scenarioStatus,
+        findings: appState.findings,
+        checks,
+        runs: appState.runs,
+      }),
+    [all, appState.scenarioStatus, appState.findings, appState.runs, checks],
+  )
+
+  const toggle = (id: string) =>
+    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+
+  /** Scenarios the writer adds for the workflows that are selected. */
+  const writeForSelected = () =>
+    scenariosFromGaps(reviewed.gaps.filter((g) => selected.some((id) => g.workflow.startsWith(id)))).slice(0, 6)
+
   const lines = [
-    `Reading the ontology for ${processId} and its five stages…`,
+    `Reading the ontology for ${selected.join(', ') || 'no workflow'} and the stages in it…`,
     'Reading the live checks that are currently failing…',
     'Reading change CH-204 and the payload that caused it…',
     'Writing positive paths first, then the negatives that must be blocked…',
@@ -226,15 +204,55 @@ export function StudioPage() {
           <Button
             variant="ai"
             leftIcon={<Sparkles size={15} />}
-            loading={phase === 'running'}
+            loading={review === 'running'}
             onClick={() => {
+              setReview('running')
+              window.setTimeout(() => setReview('done'), REVIEW_LINES.length * 420 + 200)
+            }}
+          >
+            AI review — all workflows
+          </Button>
+        }
+      />
+
+      <Card className="mb-4">
+        <CardBody className="flex flex-wrap items-center gap-2">
+          <span className="text-label font-semibold uppercase text-subtle">Workflows</span>
+          {PROCESSES.map((p) => (
+            <Chip key={p.id} selected={selected.includes(p.id)} onClick={() => toggle(p.id)}>
+              {p.id} · {p.name}
+            </Chip>
+          ))}
+          <Button size="sm" onClick={() => setSelected(PROCESSES.map((p) => p.id))}>
+            Select all
+          </Button>
+          <Button size="sm" onClick={() => setSelected([])}>
+            Clear
+          </Button>
+          <Button
+            size="sm"
+            variant="ai"
+            className="ml-auto"
+            leftIcon={<Sparkles size={14} />}
+            loading={phase === 'running'}
+            disabled={selected.length === 0}
+            onClick={() => {
+              const next = writeForSelected()
+              if (!next.length) {
+                toast({
+                  title: 'Nothing to add for these workflows',
+                  description: 'Every stage already has a scenario and no check is failing.',
+                  tone: 'info',
+                })
+                return
+              }
               setPhase('running')
               window.setTimeout(() => {
-                setGenerated(GENERATED)
-                GENERATED.forEach((g) => store.setScenarioStatus(g.id, 'Pending approval'))
+                setGenerated((cur) => [...next.filter((n) => !cur.some((c) => c.id === n.id)), ...cur])
+                next.forEach((g) => store.setScenarioStatus(g.id, 'Pending approval'))
                 setPhase('done')
                 toast({
-                  title: '3 scenarios generated',
+                  title: `${next.length} scenarios generated`,
                   description: 'They are pending your approval.',
                   tone: 'info',
                   action: { label: 'Open approvals', onClick: () => navigate('/approvals') },
@@ -242,21 +260,132 @@ export function StudioPage() {
               }, lines.length * 420 + 200)
             }}
           >
-            Generate scenarios with AI
+            Generate with AI ({selected.length} selected)
           </Button>
-        }
-      />
-
-      <Card className="mb-4">
-        <CardBody className="flex flex-wrap items-center gap-3">
-          <span className="text-label font-semibold uppercase text-subtle">Workflow</span>
-          {PROCESSES.map((p) => (
-            <Chip key={p.id} selected={p.id === processId} onClick={() => setProcessId(p.id)}>
-              {p.id} · {p.name}
-            </Chip>
-          ))}
         </CardBody>
       </Card>
+
+      {review !== 'idle' && (
+        <Card className="mb-4" tone="ai">
+          <CardHeader
+            title="AI review of every workflow"
+            subtitle="Coverage, gaps and risk, read from the scenario library and the live data."
+            actions={
+              review === 'done' ? (
+                <Button size="sm" leftIcon={<Printer size={14} />} onClick={() => navigate('/studio-review')}>
+                  Download report
+                </Button>
+              ) : undefined
+            }
+          />
+          <CardBody className="space-y-4">
+            <LiveLog lines={REVIEW_LINES} running={review === 'running'} height={150} />
+            {review === 'done' && (
+              <>
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <StatTile
+                    label="Stage coverage"
+                    value={`${reviewed.coverage} %`}
+                    tone={reviewed.coverage >= 80 ? 'success' : reviewed.coverage >= 60 ? 'warning' : 'danger'}
+                    hint={`${reviewed.tested} of ${reviewed.stages} stages have a scenario`}
+                  />
+                  <StatTile
+                    label="Scenarios"
+                    value={num(reviewed.total)}
+                    hint={`${reviewed.byType.Positive} positive · ${reviewed.byType.Negative} negative · ${reviewed.byType.Regression} re-test`}
+                  />
+                  <StatTile
+                    label="Approved"
+                    value={num(reviewed.approved)}
+                    tone="success"
+                    hint={`${reviewed.pending} pending approval`}
+                    onClick={() => navigate('/approvals')}
+                  />
+                  <StatTile
+                    label="Last run"
+                    value={reviewed.lastRun.verdict}
+                    tone={reviewed.lastRun.verdict === 'PASS' ? 'success' : reviewed.lastRun.verdict === 'FAIL' ? 'danger' : 'warning'}
+                    hint={`${reviewed.lastRun.id} · ${reviewed.lastRun.failed} failed`}
+                    onClick={() => navigate(`/report/${reviewed.lastRun.id}`)}
+                  />
+                </div>
+
+                <DataTable
+                  rows={reviewed.workflows}
+                  rowKey={(w) => w.id}
+                  dense
+                  rowTone={(w) => (w.risk === 'High' ? 'danger' : w.risk === 'Medium' ? 'warning' : undefined)}
+                  columns={[
+                    { key: 'id', header: 'Workflow', mono: true, width: 70 },
+                    { key: 'name', header: 'Name' },
+                    { key: 'coverage', header: 'Coverage', width: 100, align: 'right', render: (w) => `${w.coverage} %` },
+                    { key: 'untested', header: 'Stages with no test', render: (w) => (w.untested.length ? w.untested.join(', ') : 'none') },
+                    { key: 'failingChecks', header: 'Failing checks', width: 140, render: (w) => (w.failingChecks.length ? w.failingChecks.join(', ') : 'none') },
+                    { key: 'openFindings', header: 'Open findings', width: 120, align: 'right', mono: true },
+                    { key: 'risk', header: 'Risk', width: 90, render: (w) => <Badge tone={w.risk === 'High' ? 'danger' : w.risk === 'Medium' ? 'warning' : 'success'}>{w.risk}</Badge> },
+                  ]}
+                  empty="No workflows to review."
+                />
+
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="text-label font-semibold uppercase text-subtle">
+                      Gaps and what the AI would add
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ai"
+                      className="ml-auto"
+                      disabled={reviewed.gaps.length === 0}
+                      onClick={() => {
+                        const next = scenariosFromGaps(reviewed.gaps)
+                        setGenerated((cur) => [...next.filter((n) => !cur.some((c) => c.id === n.id)), ...cur])
+                        next.forEach((g) => store.setScenarioStatus(g.id, 'Pending approval'))
+                        toast({
+                          title: `${next.length} scenarios generated`,
+                          description: 'They are pending your approval.',
+                          tone: 'info',
+                          action: { label: 'Open approvals', onClick: () => navigate('/approvals') },
+                        })
+                      }}
+                    >
+                      Generate these
+                    </Button>
+                  </div>
+                  <DataTable
+                    rows={reviewed.gaps}
+                    rowKey={(g) => g.id}
+                    dense
+                    columns={[
+                      { key: 'workflow', header: 'Workflow', width: 190 },
+                      { key: 'stage', header: 'Stage', width: 170 },
+                      { key: 'type', header: 'Type', width: 100 },
+                      { key: 'name', header: 'Scenario to add' },
+                      { key: 'why', header: 'Why', width: 230 },
+                    ]}
+                    empty="No gaps. Every stage has a scenario and no check is failing."
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-2 text-label font-semibold uppercase text-subtle">Requirement coverage</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {reviewed.requirements.map((r) => (
+                      <Chip
+                        key={r.id}
+                        title={r.full}
+                        onClick={() => navigate(r.screens[0]?.route ?? '/journey')}
+                      >
+                        {r.id} · {r.steps.length} {r.steps.length === 1 ? 'step' : 'steps'}
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {phase !== 'idle' && (
         <Card className="mb-4" tone="ai">
@@ -272,7 +401,7 @@ export function StudioPage() {
       )}
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Scenarios for this workflow" value={num(forProcess.length)} />
+        <StatTile label="Scenarios selected" value={num(forProcess.length)} hint={`${selected.length} of ${PROCESSES.length} workflows`} />
         <StatTile label="Approved" value={num(forProcess.filter((s) => (appState.scenarioStatus[s.id] ?? 'Approved') === 'Approved').length)} tone="success" />
         <StatTile
           label="Pending approval"
