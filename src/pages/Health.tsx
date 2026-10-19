@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Activity,
@@ -31,15 +31,13 @@ import { SourceNote } from '@/components/domain/SourceNote'
 import { FREEZE_TARGET_DAYS, PROCESSES, RUNS, SCENARIOS, TREND_30_DAYS, freezeDays, type StageHealth } from '@/data'
 import { JOURNEY_REQUIREMENTS, screensForRequirement, stepsCovering } from '@/data/journey'
 import { useStore } from '@/data/appStore'
-import { ALL_PROJECTS, PROJECTS, projectOfSystem, projectOfSystems, useProjectFilter } from '@/data/projects'
 import { useChecks, useSim } from '@/sim/useSim'
 import { confidence } from '@/lib/score'
 import { useConfidenceInput, scoreIf } from '@/lib/useConfidenceInput'
 import { interfaceStats } from '@/lib/interfaceStats'
 import { interfaceTraffic, plantPulse, systemActivity } from '@/lib/live'
-import { fmtSim, num, plural } from '@/lib/format'
+import { fmtSim, num } from '@/lib/format'
 import { useDrawer } from '@/providers/DrawerProvider'
-import { useToast } from '@/providers/ToastProvider'
 
 const TABS = [
   { label: 'Health', path: '/' },
@@ -71,18 +69,9 @@ const HEALTH_TONE: Record<StageHealth, 'success' | 'warning' | 'danger' | 'neutr
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** "18 Oct 2026 02:00" becomes "Tonight 02:00"; anything without a clock stays blank. */
-function shortWhen(s: { nextRun: string; nextInMinutes: number }) {
-  const time = s.nextRun.match(/\b(\d{2}:\d{2})$/)?.[1]
-  if (!time) return ''
-  if (s.nextInMinutes <= 24 * 60 && Number(time.slice(0, 2)) < 5) return `Tonight ${time}`
-  return time
-}
-
 export function HealthPage() {
   const navigate = useNavigate()
   const drawer = useDrawer()
-  const toast = useToast()
   const store = useStore()
   const checks = useChecks()
   const { engine } = useSim()
@@ -166,12 +155,6 @@ export function HealthPage() {
     return list.sort((a, b) => b.gain - a.gain).slice(0, 4)
   }, [input, conf.score, criticals, failingChecks, checks, ifStats, store.findings])
 
-  const projectFilter = useProjectFilter()
-  const nextRuns = [...store.schedules]
-    .filter((s) => s.on && (s.project === ALL_PROJECTS || projectFilter.matches(s.project)))
-    .sort((a, b) => a.nextInMinutes - b.nextInMinutes)
-    .slice(0, 3)
-
   return (
     <>
       <PageHeader
@@ -192,80 +175,6 @@ export function HealthPage() {
           </>
         }
       />
-
-      {/* ---------------------------------------------------------------- */}
-      {/* the projects running at the same time                              */}
-      {/* ---------------------------------------------------------------- */}
-      <Card>
-        <CardHeader
-          title="Projects"
-          subtitle="Three change projects are running at once. Pick one in the header and the whole factory follows it."
-          actions={
-            <Badge tone={projectFilter.project ? 'info' : 'neutral'}>
-              {projectFilter.project ? projectFilter.project.name : 'All projects'}
-            </Badge>
-          }
-        />
-        <CardBody className="divide-y divide-line py-0">
-          {PROJECTS.map((p) => {
-            const scenarios = SCENARIOS.filter((s) => projectOfSystems(s.systems) === p.id).length
-            const open = store.findings.filter((f) => f.status !== 'Closed' && projectOfSystem(f.system) === p.id)
-            const criticalsHere = open.filter((f) => f.severity === 'Critical').length
-            const schedules = store.schedules.filter((s) => s.project === p.id && s.on).length
-            const selected = projectFilter.projectId === p.id
-            return (
-              <div
-                key={p.id}
-                className={cn(
-                  'flex flex-wrap items-center gap-x-3 gap-y-1 px-1 py-2',
-                  selected && 'bg-primary-soft/40',
-                )}
-              >
-                <span className="text-sm font-medium text-text">{p.name}</span>
-                <Badge tone={criticalsHere ? 'danger' : open.length ? 'warning' : 'success'}>
-                  {criticalsHere ? `${criticalsHere} critical` : open.length ? `${open.length} open` : 'clean'}
-                </Badge>
-                <span className="font-mono text-[11px] text-subtle">{num(scenarios)} scenarios</span>
-                <span className="font-mono text-[11px] text-subtle">{plural(schedules, 'schedule on', 'schedules on')}</span>
-                <span className="font-mono text-[11px] text-subtle">{p.release}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    projectFilter.setProject(p.id)
-                    toast({ title: `Showing project: ${p.name}`, tone: 'info' })
-                    navigate(`/run?project=${p.id}`)
-                  }}
-                  className="ml-auto rounded-sm text-xs font-medium text-primary transition-colors hover:underline"
-                  title={`Show ${p.name} in the Run Centre`}
-                >
-                  View →
-                </button>
-              </div>
-            )
-          })}
-        </CardBody>
-      </Card>
-
-      <p className="mb-4 mt-1.5 px-1 text-xs text-muted">
-        Next runs:{' '}
-        {nextRuns.length === 0
-          ? 'nothing is scheduled'
-          : nextRuns.map((s, i) => (
-              <Fragment key={s.id}>
-                {i > 0 && ' · '}
-                {s.name}
-                {shortWhen(s) && <span className="text-subtle"> {shortWhen(s)}</span>}
-              </Fragment>
-            ))}{' '}
-        —{' '}
-        <button
-          type="button"
-          onClick={() => navigate('/run/schedules')}
-          className="rounded-sm font-medium text-primary transition-colors hover:underline"
-        >
-          see Schedules →
-        </button>
-      </p>
 
       {/* ---------------------------------------------------------------- */}
       {/* the plant, live                                                    */}
