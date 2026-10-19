@@ -483,12 +483,17 @@ function useLiveRows(): Record<string, number> {
 
 export function BusinessObjectsPage() {
   const navigate = useNavigate()
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const rows = useLiveRows()
-  const selectedId = params.get('object') ?? BUSINESS_OBJECTS[0].id
-  const object = objectById(selectedId) ?? BUSINESS_OBJECTS[0]
-  const select = (id: string) => setParams({ object: id }, { replace: true })
 
+  /* The choice is kept here, not in the address bar: changing the address is a
+     navigation, and the shell scrolls a navigation back to the top. Picking an
+     object has to leave the page exactly where the reader left it. */
+  const [selectedId, setSelectedId] = useState(() => {
+    const wanted = params.get('object')
+    return wanted && objectById(wanted) ? wanted : BUSINESS_OBJECTS[0].id
+  })
+  const object = objectById(selectedId) ?? BUSINESS_OBJECTS[0]
   const toConfirm = BUSINESS_OBJECTS.filter((o) => o.status === 'To confirm').length
 
   return (
@@ -504,11 +509,35 @@ export function BusinessObjectsPage() {
         }
       />
 
-      <div className="mb-4 grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-        {/* ------------------------------------------------------- the list */}
+      {/* ------------------------------------------------------- the map */}
+      <Card className="mb-4">
+        <CardHeader
+          title="How everything connects"
+          subtitle="Hover an object to pick out its links. Press one and the detail below follows."
+          actions={
+            <span className="flex flex-wrap items-center gap-3 text-[11px] text-muted">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-success" /> confirmed
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-accent" /> to confirm
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-0 w-5 border-t-2 border-primary" /> links of the chosen object
+              </span>
+            </span>
+          }
+        />
+        <div className="j2w-scroll overflow-x-auto px-4 pb-4">
+          <ObjectMap selectedId={object.id} onSelect={setSelectedId} />
+        </div>
+      </Card>
+
+      {/* --------------------------------------------------- the details */}
+      <div className="grid gap-4 lg:grid-cols-[286px_minmax(0,1fr)]">
         <Card className="self-start">
           <CardHeader title="Business objects" />
-          <CardBody className="max-h-[720px] space-y-0.5 overflow-y-auto p-2 j2w-scroll">
+          <CardBody className="j2w-scroll max-h-[760px] space-y-0.5 overflow-y-auto p-2">
             {BUSINESS_OBJECTS.map((o) => {
               const Icon = OBJECT_ICONS[o.icon] ?? Boxes
               const active = o.id === object.id
@@ -516,10 +545,12 @@ export function BusinessObjectsPage() {
                 <button
                   key={o.id}
                   type="button"
-                  onClick={() => select(o.id)}
+                  onClick={() => setSelectedId(o.id)}
                   className={cn(
-                    'flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors',
-                    active ? 'bg-primary-soft text-text' : 'hover:bg-surface2',
+                    'flex w-full items-start gap-2.5 rounded-md border px-2.5 py-2 text-left transition-colors',
+                    active
+                      ? 'border-primary/40 bg-primary-soft'
+                      : 'border-transparent hover:border-line hover:bg-surface2',
                   )}
                 >
                   <Icon size={15} className={cn('mt-0.5 shrink-0', active ? 'text-primary' : 'text-subtle')} />
@@ -534,7 +565,6 @@ export function BusinessObjectsPage() {
           </CardBody>
         </Card>
 
-        {/* ----------------------------------------------------- the detail */}
         <div className="min-w-0 space-y-4">
           <Card>
             <CardHeader
@@ -549,15 +579,10 @@ export function BusinessObjectsPage() {
                 </span>
               }
             />
-            <CardBody className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
-                <div className="text-label font-semibold uppercase text-subtle">Grain</div>
-                <div className="mt-0.5 text-sm text-text">{object.grain}</div>
-              </div>
-              <div className="rounded-md border border-line bg-surface2/60 px-3 py-2">
-                <div className="text-label font-semibold uppercase text-subtle">Primary key</div>
-                <div className="mt-0.5 font-mono text-sm text-text">{object.primaryKey}</div>
-              </div>
+            <CardBody className="grid gap-3 sm:grid-cols-3">
+              <Fact label="Grain" value={object.grain} />
+              <Fact label="Primary key" value={object.primaryKey} mono />
+              <Fact label="Live rows now" value={num(rows[object.id] ?? 0)} mono />
             </CardBody>
           </Card>
 
@@ -598,7 +623,7 @@ export function BusinessObjectsPage() {
           <Card>
             <CardHeader title="Connected to" subtitle="Press a neighbour to open it." />
             <CardBody>
-              <NeighbourGraph object={object} onSelect={select} />
+              <NeighbourGraph object={object} onSelect={setSelectedId} />
             </CardBody>
           </Card>
 
@@ -636,16 +661,6 @@ export function BusinessObjectsPage() {
           </Card>
         </div>
       </div>
-
-      <Card>
-        <CardHeader
-          title="How everything connects"
-          subtitle="Hover an object to pick out its links. Press one to open it above."
-        />
-        <div className="j2w-scroll overflow-x-auto p-3">
-          <ObjectMap selectedId={object.id} onSelect={select} />
-        </div>
-      </Card>
     </>
   )
 }
@@ -679,59 +694,157 @@ function Fact({
   )
 }
 
+/** One node, drawn the same way on both graphs. */
+function ObjectNode({
+  object,
+  x,
+  y,
+  width,
+  state,
+  onSelect,
+  onHover,
+}: {
+  object: BusinessObject
+  x: number
+  y: number
+  width: number
+  state: 'selected' | 'linked' | 'dim'
+  onSelect: () => void
+  onHover?: (id: string | null) => void
+}) {
+  const Icon = OBJECT_ICONS[object.icon] ?? Boxes
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      onMouseEnter={() => onHover?.(object.id)}
+      onMouseLeave={() => onHover?.(null)}
+      title={`${object.name} — ${object.grain}`}
+      style={{ left: x, top: y, width }}
+      className={cn(
+        'absolute flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left transition-all duration-150',
+        state === 'selected'
+          ? 'border-primary bg-primary-soft shadow-md ring-2 ring-primary/30'
+          : state === 'linked'
+            ? 'border-line-strong bg-surface shadow-sm hover:-translate-y-px hover:shadow-md'
+            : 'border-line bg-surface opacity-70 hover:opacity-100',
+      )}
+    >
+      <Icon size={13} className={cn('shrink-0', state === 'selected' ? 'text-primary' : 'text-subtle')} />
+      <span
+        className={cn(
+          'min-w-0 flex-1 overflow-hidden text-[11px] font-medium leading-[1.15]',
+          state === 'selected' ? 'text-primary' : 'text-text',
+        )}
+      >
+        {object.name}
+      </span>
+      <span
+        className={cn(
+          'h-1.5 w-1.5 shrink-0 rounded-full',
+          object.status === 'Confirmed' ? 'bg-success' : 'bg-accent',
+        )}
+      />
+    </button>
+  )
+}
+
+/** The relation written on a link. */
+function LinkLabel({ x, y, label, cardinality }: { x: number; y: number; label: string; cardinality: string }) {
+  return (
+    <span
+      style={{ left: x, top: y }}
+      className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] text-muted shadow-sm"
+    >
+      {label} <span className="font-mono text-[9.5px] text-subtle">{cardinality}</span>
+    </span>
+  )
+}
+
 /** The selected object in the middle, everything joined to it around the edge. */
 function NeighbourGraph({ object, onSelect }: { object: BusinessObject; onSelect: (id: string) => void }) {
   const t = useThemeTokens()
   const list = neighboursOf(object.id)
-  const W = 860
-  const H = Math.max(210, 120 + list.length * 22)
+  if (!list.length) return <p className="text-sm text-muted">Nothing joins to this object yet.</p>
+
+  const W = 880
+  const NODE_W = 150
+  const NODE_H = 32
+  const H = list.length > 4 ? 300 : 250
   const cx = W / 2
   const cy = H / 2
   const rx = W / 2 - 110
-  const ry = H / 2 - 34
+  const ry = H / 2 - 42
 
-  if (!list.length) return <p className="text-sm text-muted">Nothing joins to this object yet.</p>
+  const points = list.map((n, i) => {
+    const angle = (i / list.length) * Math.PI * 2 - Math.PI / 2
+    return { ...n, x: cx + Math.cos(angle) * rx, y: cy + Math.sin(angle) * ry }
+  })
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="min-w-[640px]">
-      {list.map((n, i) => {
-        const angle = (i / list.length) * Math.PI * 2 - Math.PI / 2
-        const x = cx + Math.cos(angle) * rx
-        const y = cy + Math.sin(angle) * ry
-        const mx = (cx + x) / 2
-        const my = (cy + y) / 2
-        return (
-          <g key={n.link.from + n.link.to + n.other.id}>
-            <line x1={cx} y1={cy} x2={x} y2={y} stroke={t.line} strokeWidth={1.4} />
-            <rect x={mx - 48} y={my - 9} width={96} height={18} rx={9} fill={t.surface} stroke={t.line} />
-            <text x={mx} y={my + 4} fontSize={8.5} textAnchor="middle" fill={t.muted}>
-              {n.outgoing ? n.link.label : `${n.link.label} ←`}
-            </text>
-            <text x={mx} y={my + 17} fontSize={8} textAnchor="middle" fill={t.subtle} fontFamily="JetBrains Mono, monospace">
-              {n.link.cardinality}
-            </text>
-            <g className="cursor-pointer" onClick={() => onSelect(n.other.id)}>
-              <rect
-                x={x - 62}
-                y={y - 15}
-                width={124}
-                height={30}
-                rx={8}
-                fill={t.surface}
-                stroke={n.other.status === 'Confirmed' ? t['line-strong'] : t.accent}
+    <div className="j2w-scroll overflow-x-auto">
+      <div className="relative" style={{ width: W, height: H }}>
+        <svg className="pointer-events-none absolute inset-0" width={W} height={H}>
+          <defs>
+            <marker id="nb-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M 0 0 L 7 3.5 L 0 7 z" fill={t.primary} />
+            </marker>
+          </defs>
+          {points.map((n) => {
+            const dx = n.x - cx
+            const dy = n.y - cy
+            const len = Math.hypot(dx, dy) || 1
+            const pad = 74
+            const ax = cx + (dx / len) * 72
+            const ay = cy + (dy / len) * 24
+            const bx = n.x - (dx / len) * pad
+            const by = n.y - (dy / len) * 20
+            return (
+              <line
+                key={`l-${n.other.id}-${n.link.label}`}
+                x1={n.outgoing ? ax : bx}
+                y1={n.outgoing ? ay : by}
+                x2={n.outgoing ? bx : ax}
+                y2={n.outgoing ? by : ay}
+                stroke={t.primary}
+                strokeOpacity={0.55}
+                strokeWidth={1.5}
+                markerEnd="url(#nb-arrow)"
               />
-              <text x={x} y={y + 4} fontSize={10.5} textAnchor="middle" fill={t.text}>
-                {n.other.name.length > 18 ? `${n.other.name.slice(0, 17)}…` : n.other.name}
-              </text>
-            </g>
-          </g>
-        )
-      })}
-      <rect x={cx - 70} y={cy - 17} width={140} height={34} rx={9} fill={t['primary-soft']} stroke={t.primary} strokeWidth={1.6} />
-      <text x={cx} y={cy + 5} fontSize={11.5} fontWeight={600} textAnchor="middle" fill={t.primary}>
-        {object.name.length > 20 ? `${object.name.slice(0, 19)}…` : object.name}
-      </text>
-    </svg>
+            )
+          })}
+        </svg>
+
+        {points.map((n) => (
+          <LinkLabel
+            key={`t-${n.other.id}-${n.link.label}`}
+            x={(cx + n.x) / 2}
+            y={(cy + n.y) / 2}
+            label={n.link.label}
+            cardinality={n.link.cardinality}
+          />
+        ))}
+
+        {points.map((n) => (
+          <ObjectNode
+            key={n.other.id}
+            object={n.other}
+            x={n.x - NODE_W / 2}
+            y={n.y - NODE_H / 2}
+            width={NODE_W}
+            state="linked"
+            onSelect={() => onSelect(n.other.id)}
+          />
+        ))}
+
+        <div
+          style={{ left: cx - 82, top: cy - 20, width: 164 }}
+          className="absolute flex items-center justify-center gap-1.5 rounded-lg border-2 border-primary bg-primary-soft px-3 py-2 shadow-md"
+        >
+          <span className="truncate text-xs font-semibold text-primary">{object.name}</span>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -740,109 +853,104 @@ function ObjectMap({ selectedId, onSelect }: { selectedId: string; onSelect: (id
   const t = useThemeTokens()
   const [hover, setHover] = useState<string | null>(null)
 
-  const W = 1180
-  const BAND_H = 132
-  const H = OBJECT_BANDS.length * BAND_H + 24
-  const NODE_W = 132
-  const NODE_H = 34
+  const W = 1168
+  const BAND_H = 112
+  const NODE_W = 150
+  const NODE_H = 38
+  const H = OBJECT_BANDS.length * BAND_H + 8
 
+  /* One pitch for the whole map, so a band of two reads as deliberately spaced
+     rather than stranded, and a band of seven still fits. */
   const place = useMemo(() => {
     const out: Record<string, { x: number; y: number }> = {}
+    const widest = Math.max(...OBJECT_BANDS.map((b) => BUSINESS_OBJECTS.filter((o) => o.band === b).length))
+    const pitch = (W - 48) / widest
     OBJECT_BANDS.forEach((band, bi) => {
       const inBand = BUSINESS_OBJECTS.filter((o) => o.band === band)
-      const gap = (W - 80) / inBand.length
+      const start = (W - inBand.length * pitch) / 2
       inBand.forEach((o, i) => {
-        out[o.id] = { x: 40 + gap * i + gap / 2 - NODE_W / 2, y: 46 + bi * BAND_H }
+        out[o.id] = { x: start + pitch * i + pitch / 2 - NODE_W / 2, y: 50 + bi * BAND_H }
       })
     })
     return out
   }, [])
 
-  const centre = (id: string) => {
-    const p = place[id]
-    return { x: p.x + NODE_W / 2, y: p.y + NODE_H / 2 }
-  }
-
+  const centre = (id: string) => ({ x: place[id].x + NODE_W / 2, y: place[id].y + NODE_H / 2 })
   const active = hover ?? selectedId
-  const lit = (id: string) =>
-    id === active || OBJECT_LINKS.some((l) => (l.from === active && l.to === id) || (l.to === active && l.from === id))
+  const linked = (id: string) =>
+    OBJECT_LINKS.some((l) => (l.from === active && l.to === id) || (l.to === active && l.from === id))
+
+  const activeLinks = OBJECT_LINKS.filter((l) => l.from === active || l.to === active)
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} style={{ minWidth: W }}>
+    <div className="relative" style={{ width: W, height: H }}>
       {OBJECT_BANDS.map((band, bi) => (
-        <g key={band}>
-          <rect
-            x={14}
-            y={22 + bi * BAND_H}
-            width={W - 28}
-            height={BAND_H - 16}
-            rx={12}
-            fill={t['surface-2']}
-            fillOpacity={0.5}
-            stroke={t.line}
-            strokeDasharray="6 6"
-          />
-          <text x={26} y={38 + bi * BAND_H} fontSize={10} fontWeight={600} letterSpacing={0.8} fill={t.subtle}>
-            {band.toUpperCase()}
-          </text>
-        </g>
+        <div
+          key={band}
+          style={{ left: 6, top: 20 + bi * BAND_H, width: W - 12, height: BAND_H - 16 }}
+          className="absolute rounded-xl border border-dashed border-line bg-surface2/40"
+        >
+          <span className="absolute left-3 top-1.5 text-label font-semibold uppercase tracking-wider text-subtle">
+            {band}
+          </span>
+        </div>
       ))}
 
-      {OBJECT_LINKS.map((l, i) => {
-        const a = centre(l.from)
-        const b = centre(l.to)
-        const on = l.from === active || l.to === active
-        const mx = (a.x + b.x) / 2
-        const my = (a.y + b.y) / 2 + ((i % 3) - 1) * 13
-        return (
-          <g key={`${l.from}-${l.to}-${l.label}`} opacity={on ? 1 : 0.28}>
+      <svg className="pointer-events-none absolute inset-0" width={W} height={H}>
+        <defs>
+          <marker id="map-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M 0 0 L 7 3.5 L 0 7 z" fill={t.primary} />
+          </marker>
+        </defs>
+        {OBJECT_LINKS.map((l, i) => {
+          const a = centre(l.from)
+          const b = centre(l.to)
+          const on = l.from === active || l.to === active
+          const mx = (a.x + b.x) / 2
+          const my = (a.y + b.y) / 2 + ((i % 3) - 1) * 14
+          return (
             <path
+              key={`${l.from}-${l.to}-${l.label}`}
               d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`}
               fill="none"
               stroke={on ? t.primary : t['line-strong']}
+              strokeOpacity={on ? 0.8 : 0.4}
               strokeWidth={on ? 1.8 : 1}
+              markerEnd={on ? 'url(#map-arrow)' : undefined}
             />
-            {on && (
-              <>
-                <rect x={mx - 52} y={my - 9} width={104} height={17} rx={8} fill={t.surface} stroke={t.line} />
-                <text x={mx} y={my + 3} fontSize={8.5} textAnchor="middle" fill={t.muted}>
-                  {l.label} {l.cardinality}
-                </text>
-              </>
-            )}
-          </g>
-        )
-      })}
+          )
+        })}
+      </svg>
 
-      {BUSINESS_OBJECTS.map((o) => {
-        const p = place[o.id]
-        const isActive = o.id === selectedId
+      {BUSINESS_OBJECTS.map((o) => (
+        <ObjectNode
+          key={o.id}
+          object={o}
+          x={place[o.id].x}
+          y={place[o.id].y}
+          width={NODE_W}
+          state={o.id === selectedId ? 'selected' : linked(o.id) || o.id === active ? 'linked' : 'dim'}
+          onSelect={() => onSelect(o.id)}
+          onHover={setHover}
+        />
+      ))}
+
+      {activeLinks.map((l, i) => {
+        const a = centre(l.from)
+        const b = centre(l.to)
+        const idx = OBJECT_LINKS.indexOf(l)
+        /* nudged off the straight midpoint so a label never sits on a node */
+        const lift = a.y === b.y ? -26 : ((idx % 3) - 1) * 9 + ((i % 2) - 0.5) * 16
         return (
-          <g
-            key={o.id}
-            className="cursor-pointer"
-            opacity={lit(o.id) ? 1 : 0.4}
-            onMouseEnter={() => setHover(o.id)}
-            onMouseLeave={() => setHover(null)}
-            onClick={() => onSelect(o.id)}
-          >
-            <rect
-              x={p.x}
-              y={p.y}
-              width={NODE_W}
-              height={NODE_H}
-              rx={8}
-              fill={isActive ? t['primary-soft'] : t.surface}
-              stroke={isActive ? t.primary : o.status === 'Confirmed' ? t['line-strong'] : t.accent}
-              strokeWidth={isActive ? 1.8 : 1}
-            />
-            <circle cx={p.x + 11} cy={p.y + NODE_H / 2} r={3} fill={o.status === 'Confirmed' ? t.success : t.accent} />
-            <text x={p.x + 20} y={p.y + NODE_H / 2 + 4} fontSize={10.5} fill={isActive ? t.primary : t.text}>
-              {o.name.length > 19 ? `${o.name.slice(0, 18)}…` : o.name}
-            </text>
-          </g>
+          <LinkLabel
+            key={`lab-${l.from}-${l.to}-${l.label}`}
+            x={(a.x + b.x) / 2}
+            y={(a.y + b.y) / 2 + lift}
+            label={l.label}
+            cardinality={l.cardinality}
+          />
         )
       })}
-    </svg>
+    </div>
   )
 }
