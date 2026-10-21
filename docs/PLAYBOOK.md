@@ -26,7 +26,6 @@ Plain words come first. The technical term is in brackets the first time it appe
 15. [Questions the client will ask](#15-questions-the-client-will-ask-and-honest-answers)
 16. [What is live and what is written content](#16-what-is-live-and-what-is-written-content)
 17. [Glossary](#17-glossary)
-18. [Counts shown on screen](#18-counts-shown-on-screen)
 
 ---
 
@@ -44,7 +43,8 @@ Plain words come first. The technical term is in brackets the first time it appe
 4. **What the client gets.** One confidence score, a release gate (GO / CONDITIONAL / NO-GO) with
    six computed criteria, and a sealed evidence pack per release that an auditor can read.
 5. **What is on offer.** Not only a tool: a testing framework plus a team (a pod) that owns the
-   result — the framework is the story told across the five sections of this playbook.
+   result — the framework is the story this whole playbook tells, from the business flows and the
+   live checks through to the confidence score and the release gate.
 
 ---
 
@@ -116,27 +116,27 @@ That is why the numbers on every screen move while you watch.
 
 Three bands on the **Enterprise Map** (`/landscape`): the shop floor, the core ERP, and finance and
 output. Ten application systems plus four outside finance services. Thirteen of them produce data
-in the simulation; SAP S/4HANA – Service Centre is drawn for completeness and carries no live
+in the simulation; SAP S/4HANA S&S is drawn for completeness and carries no live
 traffic.
 
 | Band | System | Role in the business | Tables it owns | Key columns |
 |---|---|---|---|---|
-| Shop floor | **Yard Management** | The gate and the weighbridge | `gate_pass` | gate_pass, site, vehicle, transport, vendor, po, process, arrived |
+| Shop floor | **YardLink** | The gate and the weighbridge | `gate_pass` | gate_pass, site, vehicle, transport, vendor, po, process, arrived |
 | | | | `weighbridge_ticket` | ticket, gate_pass, vehicle, gross_kg, tare_kg, net_kg, registered_tare_kg, unit, weighed |
-| Shop floor | **Mill Execution System** | Melting and casting | `heat` | heat, coils, weight_kg, started |
-| Shop floor | **Scrap Yard Operations** | Receiving, sorting and moving scrap | `receipt` | receipt, gate_pass, vehicle, site, weight_kg, received |
+| Shop floor | **Pegase** | Melting and casting | `heat` | heat, coils, weight_kg, started |
+| Shop floor | **dOps Core** | Receiving, sorting and moving scrap | `receipt` | receipt, gate_pass, vehicle, site, weight_kg, received |
 | | | | `scrap_batch` | batch, receipt, grade, weight_kg, created |
 | | | | `chemistry` | sample, batch, ni_pct, cr_pct, mo_pct, tested |
 | | | | `transfer` | transfer, batch, from_site, to_site, weight_kg, received_kg, unit, sent, received |
 | Shop floor | **Laboratory app** | Measures the chemistry of a sample | `lab_result` | sample, batch, grade, status, tested |
-| Core ERP | **SAP S/4HANA – Steel** | Purchasing, delivery booking, invoices, payments | `EKPO` (purchase order line) | ebeln, vendor, material, price_eur_t, open_qty_kg |
+| Core ERP | **SAP S/4HANA Stainless** | Purchasing, delivery booking, invoices, payments | `EKPO` (purchase order line) | ebeln, vendor, material, price_eur_t, open_qty_kg |
 | | | | `MSEG` (delivery booked / goods receipt) | mblnr, **xblnr = gate pass**, ebeln, menge, meins, posted |
 | | | | `RBKP` (invoice record) | belnr, ext_invoice, gate_pass, ebeln, qty_kg, amount_eur, status, reason, currency, fx_rate_used, posted |
 | | | | `AFRU` (production confirmation) | rueck, heat, coils, weight_kg, delay_min, received |
-| Core ERP | **D365 F&O – Recycling** | Stock, issues and quality for recycling | `stock_posting` | journal, batch, item, qty, unit, warehouse, posted |
+| Core ERP | **D365 F&O OneCore** | Stock, issues and quality for recycling | `stock_posting` | journal, batch, item, qty, unit, warehouse, posted |
 | | | | `issue` | issue, batch, qty_kg, unit, issued |
 | | | | `quality_order` | order, batch, grade, ni_pct, cr_pct, mo_pct, result, created |
-| Core ERP | **SAP S/4HANA – Service Centre** | Second SAP instance, on the map only | — | no live traffic |
+| Core ERP | **SAP S/4HANA S&S** | Second SAP instance, on the map only | — | no live traffic |
 | Finance | **Esker** | Captures the supplier invoice | `captured_invoice` | doc, ext_invoice, gate_pass, po, qty_kg, amount_eur, captured |
 | Finance | **Lasernet** | Prints and archives documents | `output_document` | doc, type, **ref** (invoice number or batch), created |
 | Finance | **Reval** | Treasury and payments | `payment` | pay, belnr, vendor, amount_eur, run_at |
@@ -156,25 +156,25 @@ they exist in the landscape but are quiet in this demo.
 
 | Id | What it carries | From → to | Format | Live | How often |
 |---|---|---|---|---|---|
-| IF-01 | Weighbridge ticket | Yard Management → SAP Steel | API (REST) | ● | Per vehicle |
-| IF-02 | Recycling receipt | Yard Management → Scrap Yard | API (REST) | ● | Per vehicle |
-| IF-03 | Stock posting | Scrap Yard → D365 | API (OData) | ● | Per batch |
-| IF-04 | Production confirmation | Mill → SAP Steel | File drop | ● | Per heat |
-| IF-05 | Delivery note | SAP Steel → Lasernet | IDoc | ○ | Per delivery |
-| IF-06 | Captured invoice | Esker → SAP Steel | API (REST) | ● | Per invoice |
-| IF-07 | Stock transfer | SAP Steel → SAP Service Centre | IDoc | ○ | Hourly |
-| IF-08 | Inventory sync | D365 → SAP Steel | API (OData) | ○ | Nightly |
-| IF-09 | Invoice copy | SAP Steel → Lasernet | File drop | ● | Per invoice |
-| IF-10 | Mill certificate | Mill → Lasernet | File drop | ● | Per heat |
-| IF-11 | Payment file | SAP Steel → Reval | File (SFTP) | ● | Hourly |
-| IF-12 | Charge plan | Yard Management → Mill | API (REST) | ○ | Per shift |
-| IF-13 | Recycling documents (self-billing) | D365 → Lasernet | File drop | ● | Per posting |
-| IF-14 | Chemistry result | Laboratory → Scrap Yard | API (REST) | ● | Per sample |
-| IF-15 | VAT validation | SAP Steel → VAT service | API (REST) | ● | Per invoice |
-| IF-16 | Sanctions screening | SAP Steel → Sanctions service | API (REST) | ● | Per invoice |
-| IF-17 | Payment instruction | SAP Steel → eBanking gateway | File (SFTP) | ● | Hourly |
-| IF-18 | Exchange rates | Exchange-rate service → SAP Steel | API (REST) | ● | Daily at 06:00 |
-| IF-19 | Stock transfer between yards | Scrap Yard → D365 | API (OData) | ● | Per transfer |
+| IF-01 | Weighbridge ticket | YardLink → SAP S/4HANA Stainless | API (REST) | ● | Per vehicle |
+| IF-02 | Recycling receipt | YardLink → dOps Core | API (REST) | ● | Per vehicle |
+| IF-03 | Stock posting | dOps Core → D365 F&O OneCore | API (OData) | ● | Per batch |
+| IF-04 | Production confirmation | Pegase → SAP S/4HANA Stainless | File drop | ● | Per heat |
+| IF-05 | Delivery note | SAP S/4HANA Stainless → Lasernet | IDoc | ○ | Per delivery |
+| IF-06 | Captured invoice | Esker → SAP S/4HANA Stainless | API (REST) | ● | Per invoice |
+| IF-07 | Stock transfer | SAP S/4HANA Stainless → SAP S/4HANA S&S | IDoc | ○ | Hourly |
+| IF-08 | Inventory sync | D365 F&O OneCore → SAP S/4HANA Stainless | API (OData) | ○ | Nightly |
+| IF-09 | Invoice copy | SAP S/4HANA Stainless → Lasernet | File drop | ● | Per invoice |
+| IF-10 | Pegase certificate | Pegase → Lasernet | File drop | ● | Per heat |
+| IF-11 | Payment file | SAP S/4HANA Stainless → Reval | File (SFTP) | ● | Hourly |
+| IF-12 | Charge plan | YardLink → Pegase | API (REST) | ○ | Per shift |
+| IF-13 | Recycling documents (self-billing) | D365 F&O OneCore → Lasernet | File drop | ● | Per posting |
+| IF-14 | Chemistry result | Laboratory → dOps Core | API (REST) | ● | Per sample |
+| IF-15 | VAT validation | SAP S/4HANA Stainless → VAT service | API (REST) | ● | Per invoice |
+| IF-16 | Sanctions screening | SAP S/4HANA Stainless → Sanctions service | API (REST) | ● | Per invoice |
+| IF-17 | Payment instruction | SAP S/4HANA Stainless → eBanking gateway | File (SFTP) | ● | Hourly |
+| IF-18 | Exchange rates | Exchange-rate service → SAP S/4HANA Stainless | API (REST) | ● | Daily at 06:00 |
+| IF-19 | Stock transfer between yards | dOps Core → D365 F&O OneCore | API (OData) | ● | Per transfer |
 
 On **Interface Testing** the type column calls IF-06, IF-09, IF-11, IF-13 and IF-15 to IF-18
 **Financial**; everything else is **Shop-floor**.
@@ -192,18 +192,18 @@ A steel truck arrives roughly every 4 to 9 minutes.
 
 | # | What happens | System | Table that gets a row | Interface | Timing | Check that guards it |
 |---|---|---|---|---|---|---|
-| 1 | Gate pass created for the transport | Yard Management | `gate_pass` | — | on arrival | C2 |
-| 2 | Weighed full and empty; load weight = full − empty (gross − tare = net) | Yard Management | `weighbridge_ticket` | — | same minute | C1 |
-| 3 | Ticket sent to SAP | Yard Management → SAP Steel | — | **IF-01** | travels 2–6 min | C1, C2 |
-| 4 | Delivery booked in SAP (goods receipt, `MSEG`) | SAP Steel | `MSEG` | IF-01 arrives | — | C1, C2 |
+| 1 | Gate pass created for the transport | YardLink | `gate_pass` | — | on arrival | C2 |
+| 2 | Weighed full and empty; load weight = full − empty (gross − tare = net) | YardLink | `weighbridge_ticket` | — | same minute | C1 |
+| 3 | Ticket sent to SAP | YardLink → SAP S/4HANA Stainless | — | **IF-01** | travels 2–6 min | C1, C2 |
+| 4 | Delivery booked in SAP (goods receipt, `MSEG`) | SAP S/4HANA Stainless | `MSEG` | IF-01 arrives | — | C1, C2 |
 | 5 | Supplier invoice captured | Esker | `captured_invoice` | — | 35–110 min after the gate | C7 |
-| 6 | Capture sent to SAP | Esker → SAP Steel | — | **IF-06** | travels 3–8 min | C7 |
-| 7 | VAT number checked | SAP Steel → VAT service | `vat_check` | **IF-15** | travels 1–3 min | — |
-| 8 | Vendor screened against the day's sanctions list | SAP Steel → Sanctions service | `sanctions_screen` | **IF-16** | travels 1–3 min | C10 |
-| 9 | Invoice check (three-way match): order vs delivery vs invoice. Booked (posted) or on hold (parked) | SAP Steel | `RBKP` | — | on arrival of IF-06 | C7, C11 |
-| 10 | Invoice copy rendered and archived | SAP Steel → Lasernet | `output_document` | **IF-09** | travels 2–5 min | C8 |
-| 11 | Hourly payment run sends the payment file | SAP Steel → Reval | `payment` | **IF-11** | travels 2–6 min, every 60 min | — |
-| 12 | Same run sends the payment instruction to the bank | SAP Steel → eBanking | `bank_ack` | **IF-17** | travels 3–9 min | — |
+| 6 | Capture sent to SAP | Esker → SAP S/4HANA Stainless | — | **IF-06** | travels 3–8 min | C7 |
+| 7 | VAT number checked | SAP S/4HANA Stainless → VAT service | `vat_check` | **IF-15** | travels 1–3 min | — |
+| 8 | Vendor screened against the day's sanctions list | SAP S/4HANA Stainless → Sanctions service | `sanctions_screen` | **IF-16** | travels 1–3 min | C10 |
+| 9 | Invoice check (three-way match): order vs delivery vs invoice. Booked (posted) or on hold (parked) | SAP S/4HANA Stainless | `RBKP` | — | on arrival of IF-06 | C7, C11 |
+| 10 | Invoice copy rendered and archived | SAP S/4HANA Stainless → Lasernet | `output_document` | **IF-09** | travels 2–5 min | C8 |
+| 11 | Hourly payment run sends the payment file | SAP S/4HANA Stainless → Reval | `payment` | **IF-11** | travels 2–6 min, every 60 min | — |
+| 12 | Same run sends the payment instruction to the bank | SAP S/4HANA Stainless → eBanking | `bank_ack` | **IF-17** | travels 3–9 min | — |
 
 The invoice is parked when: no purchase order reference, no delivery booking found, or the quantity
 differs by more than 1 %.
@@ -214,20 +214,20 @@ A recycling load arrives roughly every 7 to 13 minutes. **The recycling yard wei
 
 | # | What happens | System | Table | Interface | Timing | Check |
 |---|---|---|---|---|---|---|
-| 1 | Gate pass for the wagon, truck or container | Yard Management | `gate_pass` | — | on arrival | C3 |
-| 2 | Weighed in **tonnes** (e.g. 42.26 t) | Yard Management | `weighbridge_ticket` (`unit = 't'`) | — | same minute | C3 |
-| 3 | Receipt sent to the scrap yard | Yard → Scrap Yard | — | **IF-02** | travels 2–6 min | C3 |
-| 4 | Scrap Yard converts to **kilograms** (42.26 t → 42 260 kg) | Scrap Yard | `receipt` | IF-02 arrives | — | C3, C4 |
-| 5 | Sorted into 1 to 3 batches; the batches must add up | Scrap Yard | `scrap_batch` | — | 8–25 min later | C4 |
+| 1 | Gate pass for the wagon, truck or container | YardLink | `gate_pass` | — | on arrival | C3 |
+| 2 | Weighed in **tonnes** (e.g. 42.26 t) | YardLink | `weighbridge_ticket` (`unit = 't'`) | — | same minute | C3 |
+| 3 | Receipt sent to the scrap yard | YardLink → dOps Core | — | **IF-02** | travels 2–6 min | C3 |
+| 4 | dOps Core converts to **kilograms** (42.26 t → 42 260 kg) | dOps Core | `receipt` | IF-02 arrives | — | C3, C4 |
+| 5 | Sorted into 1 to 3 batches; the batches must add up | dOps Core | `scrap_batch` | — | 8–25 min later | C4 |
 | 6 | Sample sent to the laboratory and measured | Laboratory | `lab_result` | — | 10–30 min after sorting | C5 |
-| 7 | Chemistry result returned (Ni, Cr, Mo) | Laboratory → Scrap Yard | `chemistry` | **IF-14** | travels 2–6 min | C5, C13 |
-| 8 | **Quality order** raised against the grade window | D365 | `quality_order` | — | 3–8 min after the chemistry | C13 |
-| 9 | Stock posted in kilograms | Scrap Yard → D365 | `stock_posting` | **IF-03** | 5–15 min after sorting, travels 2–5 min | C6 |
-| 10 | Self-billing document for the booked scrap purchase | D365 → Lasernet | `output_document` | **IF-13** | travels 2–5 min | C8 |
-| 11 | **Melt shop issues** part or all of the batch, always in kilograms | D365 | `issue` | — | 20–60 min after the stock posting | C6b |
-| 12 | About one batch in three is **transferred to the other yard** (YD02 ↔ YD05) | Scrap Yard → D365 | `transfer` | **IF-19** | 25–70 min later, travels 3–9 min | C12 |
+| 7 | Chemistry result returned (Ni, Cr, Mo) | Laboratory → dOps Core | `chemistry` | **IF-14** | travels 2–6 min | C5, C13 |
+| 8 | **Quality order** raised against the grade window | D365 F&O OneCore | `quality_order` | — | 3–8 min after the chemistry | C13 |
+| 9 | Stock posted in kilograms | dOps Core → D365 F&O OneCore | `stock_posting` | **IF-03** | 5–15 min after sorting, travels 2–5 min | C6 |
+| 10 | Self-billing document for the booked scrap purchase | D365 F&O OneCore → Lasernet | `output_document` | **IF-13** | travels 2–5 min | C8 |
+| 11 | **Melt shop issues** part or all of the batch, always in kilograms | D365 F&O OneCore | `issue` | — | 20–60 min after the stock posting | C6b |
+| 12 | About one batch in three is **transferred to the other yard** (YD02 ↔ YD05) | dOps Core → D365 F&O OneCore | `transfer` | **IF-19** | 25–70 min later, travels 3–9 min | C12 |
 
-**Tonnes received → kilograms issued** is the heart of this flow. The yard says 42.26 t, D365 must
+**Tonnes received → kilograms issued** is the heart of this flow. The yard says 42.26 t, D365 F&O OneCore must
 hold 42 260 KG, and the melt shop takes kilograms out of it. If the × 1 000 step is skipped
 (fault F6), stock reads 42.26 KG and the melt shop has issued more than exists — C6 and C6b both
 light up, and the same fault makes a transfer arrive 1 000 times light (C12).
@@ -237,15 +237,15 @@ be ±0.28 %, chromium ±0.38 %, molybdenum ±0.095 % around the nominal for that
 window → **Pass**. Outside → **Fail**. A value missing → **Incomplete**, which C13 treats as a
 failure, because a quality order that cannot say anything is not a quality order.
 
-### 4.3 Mill to SAP — workflow P4 *Produce to Dispatch*
+### 4.3 Pegase to SAP — workflow P4 *Produce to Dispatch*
 
 A heat finishes roughly every 40 to 60 minutes.
 
 | # | What happens | System | Table | Interface | Timing | Check |
 |---|---|---|---|---|---|---|
-| 1 | Heat finished, with its coils and weight | Mill | `heat` | — | — | C9 |
-| 2 | Production confirmation sent | Mill → SAP Steel | `AFRU` | **IF-04** | normally 3–10 min | C9 |
-| 3 | Mill certificate rendered | Mill → Lasernet | `output_document` | **IF-10** | travels 2–6 min | — |
+| 1 | Heat finished, with its coils and weight | Pegase | `heat` | — | — | C9 |
+| 2 | Production confirmation sent | Pegase → SAP S/4HANA Stainless | `AFRU` | **IF-04** | normally 3–10 min | C9 |
+| 3 | Pegase certificate rendered | Pegase → Lasernet | `output_document` | **IF-10** | travels 2–6 min | — |
 
 The rule is 15 minutes. A late file (fault F8) takes 25 to 45 minutes and C9 names it.
 
@@ -262,7 +262,7 @@ About one supplier invoice in four is in a currency other than euro. It is booke
 rate the service has loaded. If no file arrived for that day (fault F10), the invoice is booked at
 the day before's rate and C11 names it.
 
-### 4.5 D365 → Lasernet
+### 4.5 D365 F&O OneCore → Lasernet
 
 Every booked scrap purchase produces a **self-billing document** in Lasernet over IF-13, keyed on
 the batch. C8 covers both document types: an invoice copy for every booked invoice, and a
@@ -280,15 +280,15 @@ a sample (`LAB-`), an SAP invoice number or an SAP material document number.
 
 | Time | Where | What was recorded |
 |---|---|---|
-| 09:42 | Yard Management | Gate pass **GP-PL01-2026-4182**, vehicle **VH-7741**, vendor **VEND-1042**, purchase order **4500012044** |
-| 09:42 | Yard Management | Weighed: full **38 420 kg**, empty **13 560 kg**, load **24 860 kg** (`weighbridge_ticket`, unit kg) |
+| 09:42 | YardLink | Gate pass **GP-PL01-2026-4182**, vehicle **VH-7741**, vendor **VEND-1042**, purchase order **4500012044** |
+| 09:42 | YardLink | Weighed: full **38 420 kg**, empty **13 560 kg**, load **24 860 kg** (`weighbridge_ticket`, unit kg) |
 | 09:42 | IF-01 | Message sent: `gatePass, vehicle, grossKg 38420, tareKg 13560, quantity 24860, unit KG, purchaseOrder 4500012044` |
-| 09:46 | SAP Steel | Delivery booked (`MSEG`) **5000001842**, quantity **24 860 KG**, reference = the gate pass |
+| 09:46 | SAP S/4HANA Stainless | Delivery booked (`MSEG`) **5000001842**, quantity **24 860 KG**, reference = the gate pass |
 | 11:05 | Esker | Supplier invoice **INV-418203** captured (`captured_invoice` ESK-00412), 24 860 kg, **€ 50 963** |
 | 11:11 | IF-06 | Capture sent to SAP |
 | 11:12 | VAT service | `vat_check` VAT-00231: VEND-1042, GB 418 7721 03, valid |
 | 11:12 | Sanctions service | `sanctions_screen` SCR-00231: list of **14 Oct 2026**, no hit |
-| 11:11 | SAP Steel | Invoice check passes. Invoice record (`RBKP`) **5100001193** **Posted**, currency EUR |
+| 11:11 | SAP S/4HANA Stainless | Invoice check passes. Invoice record (`RBKP`) **5100001193** **Posted**, currency EUR |
 | 11:15 | Lasernet | Invoice copy **LN-00517** archived against 5100001193 |
 | 12:00 | Reval | Payment **PY-00188** for 5100001193, € 50 963 |
 | 12:06 | eBanking | Acknowledgement **ACK-00042** for payment run PR-00031 |
@@ -302,9 +302,9 @@ Only one thing changes: the quantity on the IF-01 message.
 | Time | Where | What went wrong |
 |---|---|---|
 | 09:42 | IF-01 | The message carries `quantity 24.86` and still says `unit KG` |
-| 09:46 | SAP Steel | Delivery booked as **24.86 KG** instead of 24 860 kg |
+| 09:46 | SAP S/4HANA Stainless | Delivery booked as **24.86 KG** instead of 24 860 kg |
 | 09:52 | **C1** fails | *"Unit mix-up: 24.86 was sent as KG but is really tonnes. SAP is short by 24 835 kg."* |
-| 11:11 | SAP Steel | Invoice check compares 24 860 kg invoiced against 24.86 KG booked → **Parked**, reason *"Quantity differs by 24 835 kg"* |
+| 11:11 | SAP S/4HANA Stainless | Invoice check compares 24 860 kg invoiced against 24.86 KG booked → **Parked**, reason *"Quantity differs by 24 835 kg"* |
 | 11:11 | **C7** fails | *"Parked by the three-way match: quantity differs by 24 835 kg."* |
 | — | Lasernet | No invoice copy, because nothing was posted |
 | — | Reval | No payment |
@@ -316,7 +316,7 @@ One wrong field at 09:42 stops the money at 11:11. That is the sentence to say o
 | Where | What went wrong |
 |---|---|
 | IF-01 | The message uses the **registered** empty weight from the vehicle master (14 600 kg) instead of the one just weighed (13 560 kg), so the load is sent as 23 820 kg |
-| SAP Steel | Delivery booked as 23 820 KG |
+| SAP S/4HANA Stainless | Delivery booked as 23 820 KG |
 | **C1** | *"Stale tare: the message used the registered tare 14 600 kg instead of the weighed tare 13 560 kg."* |
 | **C7** | The invoice is parked: *"Quantity differs by 1 040 kg."* |
 
@@ -335,7 +335,7 @@ live on **Live Data Flow → Live Flow**, in the card *"What can go wrong"*.
 | **F1** | Kilogram / tonne mix-up | IF-01 | 8 % of trucks | Sends load ÷ 1000 but still labelled KG | **C1**, C7 | *"Unit mix-up: 24.86 was sent as KG but is really tonnes. SAP is short by 24 835 kg."* |
 | **F2** | Stale tare weight | IF-01 | 7 % of trucks | Uses the vehicle master's registered empty weight instead of the one just weighed | **C1**, C7 | *"Stale tare: the message used the registered tare 14 600 kg instead of the weighed tare 13 560 kg."* |
 | **F3** | Gateway retry duplicate | IF-01 | 5 % of trucks | Delivers the same ticket twice, 1–3 min apart, so SAP holds two delivery bookings | **C2** | *"The gateway delivered the ticket twice, so the quantity is counted twice."* |
-| **F4** | Lost message | IF-02 | 6 % of loads | The recycling receipt never arrives; nothing is written in the scrap yard | **C3** | *"The load was weighed at the gate but never reached Scrap Yard Operations."* |
+| **F4** | Lost message | IF-02 | 6 % of loads | The recycling receipt never arrives; nothing is written in the scrap yard | **C3** | *"The load was weighed at the gate but never reached dOps Core."* |
 | **F5** | Molybdenum field renamed | IF-14 | 20 % of samples | `mo_pct` arrives empty, so the grade cannot be certified | **C5**, **C13** | *"The laboratory renamed the field, so molybdenum arrives empty and the grade cannot be certified."* and *"The chemistry is incomplete, so the quality order cannot say whether the batch meets its grade."* |
 | **F6** | Tonnes not converted to kilograms | IF-03 and IF-19 | 7 % of batches | The × 1 000 step is skipped, so stock and transfers are 1 000 times light | **C6**, **C6b**, **C12** | *"Received 21.14 t, stock shows 21.14 KG — not converted (should be 21 140 KG)."* |
 | **F7** | No purchase order on capture | IF-06 | 6 % of invoices | Esker sends no purchase order reference, so the invoice check parks it | **C7** | *"Parked by the three-way match: no purchase order reference."* |
@@ -387,7 +387,7 @@ still on its way.
 
 | | |
 |---|---|
-| Compares | `weighbridge_ticket` ↔ `MSEG` (Yard Management ↔ SAP Steel) |
+| Compares | `weighbridge_ticket` ↔ `MSEG` (YardLink ↔ SAP S/4HANA Stainless) |
 | Interface | IF-01 · Stage: Goods receipt · Workflow P1 |
 | Settle | 10 minutes |
 | Broken by | F1, F2 |
@@ -428,7 +428,7 @@ Example: `GP-PL03-2026-5485 · VH-3310 · 2 · 5000001901, 5000001902` —
 ---
 
 ### C3 · Every recycling load reached the scrap yard
-*A load weighed at the gate must exist as a receipt in Scrap Yard Operations.*
+*A load weighed at the gate must exist as a receipt in dOps Core.*
 
 | | |
 |---|---|
@@ -444,7 +444,7 @@ where  g.process = 'P2' and r.receipt is null
 ```
 
 Example: `GP-YD02-2026-7741 · WGN-41882 · YD02 · 42.26 t · —` —
-*"The load was weighed at the gate but never reached Scrap Yard Operations."*
+*"The load was weighed at the gate but never reached dOps Core."*
 
 ---
 
@@ -488,7 +488,7 @@ Example: `BT-00231 · SCR-316L-SOLID · 10.4 · 16.9 · — · Mo` —
 ---
 
 ### C6 · Stock in kilograms matches the tonnes received
-*The yard receives tonnes. D365 must hold the same material in kilograms: tonnes × 1 000.*
+*The yard receives tonnes. D365 F&O OneCore must hold the same material in kilograms: tonnes × 1 000.*
 
 | | |
 |---|---|
@@ -507,7 +507,7 @@ Example: `BT-00231 · 21.14 t · 21 140 · 21.14 KG · JR-00318` —
 ---
 
 ### C6b · Issued kilograms never exceed stock
-*The melt shop cannot take out more kilograms than D365 shows in stock for that batch.*
+*The melt shop cannot take out more kilograms than D365 F&O OneCore shows in stock for that batch.*
 
 | | |
 |---|---|
@@ -522,7 +522,7 @@ having sum(i.qty_kg) > s.qty + 1
 ```
 
 Example: `BT-00231 · 12 680 · 21.14 KG · KG · 12 659` —
-*"The melt shop issued 12 680 kg but D365 only shows 21.14 KG, because the tonnes were never
+*"The melt shop issued 12 680 kg but D365 F&O OneCore only shows 21.14 KG, because the tonnes were never
 converted."*
 
 A batch with no stock posting at all is C6's business, not this one's, so the two checks never
@@ -570,12 +570,12 @@ left   join lasernet.output_document d on d.ref = s.batch
 where  d.doc is null
 ```
 
-Example cause: *"The invoice is posted but Lasernet never produced the copy."* or *"D365 booked the
+Example cause: *"The invoice is posted but Lasernet never produced the copy."* or *"D365 F&O OneCore booked the
 scrap purchase but Lasernet never produced the self-billing document."*
 
 ---
 
-### C9 · Mill confirmations arrive within 15 minutes
+### C9 · Pegase confirmations arrive within 15 minutes
 *A finished heat must be confirmed in SAP within 15 minutes, or the shift report is wrong.*
 
 | | |
@@ -642,7 +642,7 @@ The check only reports a day where no rate was loaded at all, or a rate that doe
 ---
 
 ### C12 · Transfers arrive with the same weight
-*A batch moved between the two recycling yards must be booked in D365 with the weight it left with.*
+*A batch moved between the two recycling yards must be booked in D365 F&O OneCore with the weight it left with.*
 
 | | |
 |---|---|
@@ -660,7 +660,7 @@ Example: `TR-00118 · BT-00231 · YD05 · YD02 · 15 200 · 15.2` —
 ---
 
 ### C13 · Every tested batch has a quality order with the right result
-*D365 must raise a quality order for every tested batch, and judge it against the window for its
+*D365 F&O OneCore must raise a quality order for every tested batch, and judge it against the window for its
 grade.*
 
 | | |
@@ -679,7 +679,7 @@ Example: `BT-00231 · SCR-316L-SOLID · 10.4 · 16.9 · — · QO-00188 · Incom
 *"The chemistry is incomplete, so the quality order cannot say whether the batch meets its grade."*
 
 A batch that genuinely fails its grade window is **not** a check failure: the quality order says
-Fail, the measured values say Fail, they agree. The check is about D365 judging correctly, not
+Fail, the measured values say Fail, they agree. The check is about D365 F&O OneCore judging correctly, not
 about the scrap being good.
 
 ---
@@ -787,21 +787,18 @@ display converts) and the light/dark toggle.
 
 **On the screen, top to bottom**
 
-1. **Projects** — the three change projects running at once (SAP release Nov, D365 recycling
-   update, Yard app release), each with its scenarios, open findings and schedules switched on.
-   Underneath: **the next three runs** the factory will start on its own.
-2. **The plant, right now** — plant clock, vehicles in the last hour, records created in the last
+1. **The plant, right now** — plant clock, vehicles in the last hour, records created in the last
    hour, messages delivered, in flight, and damaged/lost/doubled.
-3. **Confidence score** — the gauge, the four contributing bars, and four tiles: live checks
+2. **Confidence score** — the gauge, the four contributing bars, and four tiles: live checks
    passing, open findings, scenarios, interfaces agreeing.
-4. **What to do next** — up to four ranked actions with the points each would add.
-5. **Where the data is flowing** — records produced per system in the last hour; busiest interfaces
+3. **What to do next** — up to four ranked actions with the points each would add.
+4. **Where the data is flowing** — records produced per system in the last hour; busiest interfaces
    with a clean/damaged badge.
-6. **Confidence over the last 30 days** — today's point is the live gauge.
-7. **Month-end readiness** — freeze days today against the 3-day target, naming the blocker.
-8. **Workflow health** — all six workflows with live volume, the checks covering them, open
+5. **Confidence over the last 30 days** — today's point is the live gauge.
+6. **Month-end readiness** — freeze days today against the 3-day target, naming the blocker.
+7. **Workflow health** — all six workflows with live volume, the checks covering them, open
    findings and the stage strip.
-9. **Open findings**, **Requirements proven**, **Last runs**.
+8. **Open findings**, **Requirements proven**, **Last runs**.
 
 **Buttons**
 
@@ -809,7 +806,7 @@ display converts) and the light/dark toggle.
 |---|---|
 | Run the plant / Pause the plant | Starts or stops the simulated plant |
 | Run the P1 demo | Goes to the Run Centre and starts the step-by-step run |
-| Any project card | Sets the project filter the whole app follows |
+| The project picker, top right | Pick a project and the whole app follows it |
 | Any tile or row | Opens the screen behind that number |
 
 **Data.** Everything except the 30-day trend line is live from the running plant. The trend's
@@ -965,19 +962,22 @@ each stage are today's real volume."*
 
 **Purpose.** The data model: what the landscape keeps, and how it joins up.
 
-**On the screen.** Eighteen objects down the left — Vehicle, Gate pass, Weighbridge ticket,
-Vendor, Purchase order, Goods receipt, Supplier invoice, Payment, Output document, Scrap receipt,
-Scrap batch, Lab sample, Quality order, Stock posting, Yard transfer, Heat, Production
-confirmation and Material — each with its grain and a status dot. On the right, for the selected
-one: the technical id and what it is, its grain and primary key, **Properties** (every field with
-PK or FK, one line of meaning, where the value arrives from, its type and a status dot),
-**Connected to** (a small graph of its direct neighbours, each arrow carrying the relation and the
-cardinality) and **Where the data comes from** (system, table, interface, live rows now, refresh,
-and the checks that guard it). Underneath, **How everything connects** draws all eighteen in four
-bands — Yard & gate, Purchasing & finance, Recycling & quality, Mill.
+**On the screen.** At the top, **Model overview**: all eighteen objects as cards in business
+order — vendor, vehicle, material and heat; through purchase order, gate pass, weighbridge ticket
+and production confirmation; to goods receipt, supplier invoice, scrap receipt, scrap batch and
+output document; down to payment, stock posting, lab sample, quality order and yard transfer —
+each link named and carrying its cardinality. Below that, eighteen objects down the left — Vehicle,
+Gate pass, Weighbridge ticket, Vendor, Purchase order, Goods receipt, Supplier invoice, Payment,
+Output document, Scrap receipt, Scrap batch, Lab sample, Quality order, Stock posting, YardLink
+transfer, Heat, Production confirmation and Material — each with its grain and a status dot. On the
+right, for the selected one: the technical id and what it is, its grain and primary key,
+**Properties** (every field with PK or FK, one line of meaning, where the value arrives from, its
+type and a status dot), **Action types** and **Functions**, **Link types** (a small graph of its
+direct neighbours, each arrow carrying the relation and the cardinality) and **Data binding**
+(system, table, interface, live rows now, refresh, and the checks that guard it).
 
-**Buttons.** Press an object in the list, a neighbour in the small graph, or a node in the big
-graph, and the detail follows. The interface and the check ids open their own screens.
+**Buttons.** Press a card in the model overview, an object in the list, or a neighbour in the
+small graph, and the detail follows. The interface and the check ids open their own screens.
 
 **Data.** The model is written content; the live row count against each object is read from the
 running plant. Five objects and five fields are marked **To confirm**, which is where the mapping
@@ -1257,9 +1257,9 @@ goes into the evidence pack."*
 |---|---|---|---|---|
 | SCH-01 | Nightly regression | Every approved scenario in every workflow | Nightly at 02:00 | All projects |
 | SCH-02 | SAP transport check | Gate to invoice, plus the finance links | After every SAP transport | SAP release Nov |
-| SCH-03 | Recycling smoke test | Scrap to stock, quality orders and yard transfers | After every D365 update | D365 recycling update |
+| SCH-03 | Recycling smoke test | Scrap to stock, quality orders and yard transfers | After every D365 F&O OneCore update | D365 F&O OneCore recycling update |
 | SCH-04 | Month-end readiness | The close checklist and the month-end load profile | Before the month-end close | All projects |
-| SCH-05 | Yard app weekly | Gate, weighbridge and mill confirmation | Weekly on Sunday | Yard app release |
+| SCH-05 | YardLink app weekly | Gate, weighbridge and mill confirmation | Weekly on Sunday | YardLink app release |
 
 **Buttons.** *New schedule* (name, what it runs, when, project, scenarios) · the on/off switch ·
 **Run now**, which starts a real run in the Run Centre, records the verdict against the schedule and
@@ -1267,7 +1267,7 @@ sends the report to the people named on it, with a link.
 
 **Journey step** 5 · **Requirement** CORE-04.
 
-**Say this.** *"Nightly, after every transport, after every D365 update, before the close. The
+**Say this.** *"Nightly, after every transport, after every D365 F&O OneCore update, before the close. The
 report arrives without anyone asking for it."*
 
 #### Tab 3 — Evidence & Reports (`/evidence`)
@@ -1368,10 +1368,10 @@ total) → **Row sample** → **Differences explained**, grouped by cause → **
 
 | Set | Source → target |
 |---|---|
-| RS-01 | Legacy ERP extract → SAP S/4HANA – Steel (open purchase orders) |
-| RS-02 | Scrap Yard Operations → D365 F&O – Recycling (batches against stock) — reads live plant data |
-| RS-03 | Legacy ERP extract → SAP S/4HANA – Steel (vendor master) |
-| RS-04 | SAP S/4HANA – Steel → Reval (open invoices against payments) — reads live plant data |
+| RS-01 | Legacy ERP extract → SAP S/4HANA Stainless (open purchase orders) |
+| RS-02 | dOps Core → D365 F&O OneCore (batches against stock) — reads live plant data |
+| RS-03 | Legacy ERP extract → SAP S/4HANA Stainless (vendor master) |
+| RS-04 | SAP S/4HANA Stainless → Reval (open invoices against payments) — reads live plant data |
 
 **Journey step** 6 · **Requirement** ADV-04.
 
@@ -1533,7 +1533,7 @@ presses *Run* gets a short explanation instead of a dead click.
 |---|---|---|---|
 | 0:00 | **Testing Journey** (`/journey`) | *Play the journey* | *"Eight steps, from how your people work today to a release you can trust. Every step opens the screen that does it."* |
 | 1:30 | **Command Centre → Health** (`/`) | Point at the gauge, then **What to do next** | *"One number, four inputs, and the four actions ranked by the points each would add."* |
-| 3:00 | Same page | The **Projects** card | *"Three change projects at once. Pick one and the whole factory follows it."* |
+| 3:00 | Same page | The project selector, top right | *"Pick a project in the header — the whole factory follows it."* |
 | 4:00 | **Process Discovery → Process map** | Press a box → *Not right* → *Wrong system* → *Apply feedback* | *"Your key user corrects the map on screen. Version 2 is what the scripts come from."* |
 | 5:30 | **Live Data Flow → Live Flow** | *Run the plant*, point at the dots | *"Each dot is a real message, at its real position between sending and arrival."* |
 | 7:00 | **Live Data Flow → Live Checks** | Open **C1**, read the cause, press **Fix the cause and replay** | *"Nothing in the check changed. The data changed."* |
@@ -1595,7 +1595,7 @@ The step fails, and the Self-Healing agent proposes a repair with a confidence s
 rejects it. Nothing self-heals silently.
 
 **6. Tonnes versus kilograms — is that really a problem?**
-It is the one we see most. The recycling yard weighs in tonnes, D365 holds kilograms. If the
+It is the one we see most. The recycling yard weighs in tonnes, D365 F&O OneCore holds kilograms. If the
 × 1 000 step is skipped, stock reads 42.26 KG instead of 42 260 KG, and the melt shop has issued
 more than exists. Three checks catch it (C6, C6b, C12), and each one names the batch.
 
@@ -1604,12 +1604,12 @@ Yes. Every run step keeps a drawn picture of the screen it touched and its own l
 go into the evidence pack. Open the pack and scroll — the pictures are there.
 
 **8. Can the tests run without anyone starting them?**
-Yes. Run Centre → Schedules: nightly at 02:00, after every SAP transport, after every D365 update,
+Yes. Run Centre → Schedules: nightly at 02:00, after every SAP transport, after every D365 F&O OneCore update,
 before the month-end close, and weekly. The report is sent to the people named on the schedule with
 a link to the run.
 
 **9. We have several projects running at once. Does that work?**
-Yes. Pick a project in the header — SAP release Nov, D365 recycling update, Yard app release — and
+Yes. Pick a project in the header — SAP release Nov, D365 F&O OneCore recycling update, YardLink app release — and
 the scenarios, runs, changes, findings and schedules all follow it. The choice is kept in the
 address bar, so a filtered view can be shared as a link.
 
@@ -1759,35 +1759,3 @@ Nothing is random: the same seed gives the same plant every time.
 | Money shown in another currency | Illustrative rate, display only; the stored value stays in euro |
 | What one row of an object means | Grain |
 | The field a row is identified by | Primary key (PK); a pointer to another object is a foreign key (FK) |
-
----
-
-## 18. Counts shown on screen
-
-Every count a screen states is now **computed from the data**, not typed into a string. Five
-wordings that had fallen behind were fixed, and the Requirement Coverage tab was moved onto the
-same source as the Testing Journey.
-
-| Screen | Was | Now | Where the number comes from |
-|---|---|---|---|
-| Live Data Flow → Live Checks, subtitle | *"Nine rules … in all nine systems"* | *"14 rules … in all 13 systems"* | the checks that ran, and the systems that hold tables |
-| Command Centre → Release & Close, Exit criteria | *"Five conditions … all five are met"* | *"6 conditions … all 6 are met"* | the length of the criteria list |
-| Command Centre → Health, Month-end readiness | *"Freeze takes 10 days today"* | *"Freeze takes 8 days today"* | `freezeDays()`, the same close calendar that Release & Close reads |
-| Live Data Flow → Live Flow, tiles | *"nine systems"*, *"across 9 live interfaces"* | *"13 systems"*, *"across 15 live interfaces"* | the systems with simulated data, and the interfaces marked live |
-| Command Centre → Health, records card | *"Nine systems, measured…"* | *"13 systems, measured…"* | the systems the card actually lists |
-| Process Ontology → Requirement Coverage | the older `R1`–`R10` list | **CORE-01…06 and ADV-01…04** | `src/data/journey.ts`, the same source as the Testing Journey chips |
-
-Because the freeze window is now read from one place, **Health and Release & Close always show the
-same number**. Change a milestone in the close calendar and both pages follow.
-
-The Requirement Coverage tab now shows, for each of the ten requirements: the id, Core or Advanced,
-the short name, the client's own wording, the journey steps that cover it, and the screens that
-prove it — all read from the journey data, so the tab and the Testing Journey can never disagree.
-
-### One wording still to confirm
-
-| Screen | Says | Would be |
-|---|---|---|
-| Command Centre → Health, *The plant, right now* tile hint | *"… held across nine systems"* | *"… held across 13 systems"* |
-
-It was not in the list of fixes, so it has been left alone. Say the word and it takes one line.

@@ -68,7 +68,7 @@ const TABS = [
 
 const STEP_TEMPLATES: Record<string, string[]> = {
   'DS-01': [
-    'Open Yard Management',
+    'Open YardLink',
     'Search the expected deliveries for today',
     'Select the transport VH-7741',
     'Create a gate pass',
@@ -104,7 +104,7 @@ const STEP_TEMPLATES: Record<string, string[]> = {
     'Post the invoice',
   ],
   'DS-04': [
-    'Open Scrap Yard Operations',
+    'Open dOps Core',
     'Select the receipt just arrived',
     'Create the first batch',
     'Weigh and record the batch',
@@ -122,12 +122,12 @@ const STEP_TEMPLATES: Record<string, string[]> = {
     'Release the result',
   ],
   'DS-06': [
-    'Open the mill execution system',
+    'Open Pegase',
     'Select the finished heat',
     'Check the coil count and weight',
     'Confirm the heat',
     'Check that the ERP received the confirmation',
-    'Open the mill certificate',
+    'Open the Pegase certificate',
   ],
 }
 
@@ -148,7 +148,7 @@ const SOPS = [
   {
     id: 'SOP-114',
     title: 'Gate and weighbridge procedure',
-    system: 'Yard Management',
+    system: 'YardLink',
     text: `1. Every inbound transport must present a gate pass before entering the yard.
 2. Gross weight is taken on arrival, tare weight after tipping.
 3. The net weight is gross minus tare. It must never be entered by hand.
@@ -167,7 +167,7 @@ const SOPS = [
   {
     id: 'SOP-203',
     title: 'Sortation and grading',
-    system: 'Scrap Yard Operations',
+    system: 'dOps Core',
     text: `1. Each receipt is sorted into one to three batches.
 2. The batch weights must add up to the weight received.
 3. Every batch takes a sample before it can be charged into the mill.`,
@@ -1412,15 +1412,15 @@ function ActivitiesCard() {
     const parked = db.RBKP.filter((r) => r.status === 'Parked').length
     const noMo = db.chemistry.filter((c) => c.mo_pct === null).length
     return [
-      { activity: 'Weigh a vehicle', occurrences: db.weighbridge_ticket.length, seconds: 210, systems: 'Yard Management', evidence: 'DS-01', rework: false, route: '/flow/data?system=yard&table=weighbridge_ticket' },
-      { activity: 'Book the goods receipt', occurrences: db.MSEG.length, seconds: 4, systems: 'SAP S/4HANA – Steel', evidence: 'DS-01, log', rework: false, route: '/flow/data?system=sap-steel&table=MSEG' },
+      { activity: 'Weigh a vehicle', occurrences: db.weighbridge_ticket.length, seconds: 210, systems: 'YardLink', evidence: 'DS-01', rework: false, route: '/flow/data?system=yard&table=weighbridge_ticket' },
+      { activity: 'Book the goods receipt', occurrences: db.MSEG.length, seconds: 4, systems: 'SAP S/4HANA Stainless', evidence: 'DS-01, log', rework: false, route: '/flow/data?system=sap-steel&table=MSEG' },
       { activity: 'Capture the supplier invoice', occurrences: db.captured_invoice.length, seconds: 320, systems: 'Esker', evidence: 'DS-02', rework: false, route: '/flow/data?system=esker&table=captured_invoice' },
-      { activity: 'Run the three-way match', occurrences: db.RBKP.length, seconds: 6, systems: 'SAP S/4HANA – Steel', evidence: 'DS-03, log', rework: false, route: '/flow/data?system=sap-steel&table=RBKP' },
-      { activity: 'Handle a parked invoice', occurrences: parked, seconds: 1680, systems: 'SAP, Yard Management', evidence: 'DS-03', rework: true, route: '/flow/checks' },
-      { activity: 'Sort a receipt into batches', occurrences: db.scrap_batch.length, seconds: 540, systems: 'Scrap Yard Operations', evidence: 'DS-04', rework: false, route: '/flow/data?system=scrap&table=scrap_batch' },
+      { activity: 'Run the three-way match', occurrences: db.RBKP.length, seconds: 6, systems: 'SAP S/4HANA Stainless', evidence: 'DS-03, log', rework: false, route: '/flow/data?system=sap-steel&table=RBKP' },
+      { activity: 'Handle a parked invoice', occurrences: parked, seconds: 1680, systems: 'SAP, YardLink', evidence: 'DS-03', rework: true, route: '/flow/checks' },
+      { activity: 'Sort a receipt into batches', occurrences: db.scrap_batch.length, seconds: 540, systems: 'dOps Core', evidence: 'DS-04', rework: false, route: '/flow/data?system=scrap&table=scrap_batch' },
       { activity: 'Release a laboratory sample', occurrences: db.lab_result.length, seconds: 420, systems: 'Laboratory app', evidence: 'DS-05', rework: false, route: '/flow/data?system=lab&table=lab_result' },
-      { activity: 'Re-sample after an incomplete result', occurrences: noMo, seconds: 900, systems: 'Laboratory, Scrap Yard', evidence: 'DS-05, log', rework: true, route: '/flow/checks' },
-      { activity: 'Confirm a heat', occurrences: db.AFRU.length, seconds: 90, systems: 'Mill, SAP', evidence: 'DS-06', rework: false, route: '/flow/data?system=sap-steel&table=AFRU' },
+      { activity: 'Re-sample after an incomplete result', occurrences: noMo, seconds: 900, systems: 'Laboratory, dOps Core', evidence: 'DS-05, log', rework: true, route: '/flow/checks' },
+      { activity: 'Confirm a heat', occurrences: db.AFRU.length, seconds: 90, systems: 'Pegase, SAP', evidence: 'DS-06', rework: false, route: '/flow/data?system=sap-steel&table=AFRU' },
     ]
   }, [version])
 

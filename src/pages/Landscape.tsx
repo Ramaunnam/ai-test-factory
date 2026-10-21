@@ -239,8 +239,8 @@ export function LandscapePage() {
               columns={[
                 { key: 'id', header: 'Interface', mono: true, width: 100 },
                 { key: 'name', header: 'What it carries' },
-                { key: 'from', header: 'From', render: (i) => SYSTEMS.find((s) => s.id === i.from)?.short ?? i.from },
-                { key: 'to', header: 'To', render: (i) => SYSTEMS.find((s) => s.id === i.to)?.short ?? i.to },
+                { key: 'from', header: 'From', render: (i) => SYSTEMS.find((s) => s.id === i.from)?.name ?? i.from },
+                { key: 'to', header: 'To', render: (i) => SYSTEMS.find((s) => s.id === i.to)?.name ?? i.to },
                 { key: 'method', header: 'Method', width: 110 },
                 { key: 'frequency', header: 'Frequency', width: 130 },
                 { key: 'live', header: 'Traffic', width: 100, render: (i) => <Badge tone={i.live ? 'info' : 'neutral'}>{i.live ? 'live' : 'static'}</Badge>, value: (i) => (i.live ? 1 : 0) },

@@ -7,8 +7,8 @@ comes from.
   recycling application landscape.
 - **Size**: 55 TypeScript files, about 15 100 lines, 7 runtime dependencies.
 - **Backend**: none. A simulated plant runs in the browser and produces all the live data.
-- **Naming**: every company, person, location and in-house system name is generic. Nothing in
-  this repository identifies a real client.
+- **Naming**: every company, person and location name is generic. Nothing in this repository
+  identifies a real client.
 
 ---
 
@@ -35,8 +35,8 @@ comes from.
 
 ## 1. The idea in one page
 
-A steel and recycling group runs ten systems — a yard app, a scrap yard app, a laboratory app, a
-mill execution system, two SAP S/4HANA instances, D365, Esker, Lasernet and Reval — plus four
+A steel and recycling group runs ten systems — YardLink, dOps Core, a laboratory app, Pegase,
+two SAP S/4HANA instances, D365 F&O OneCore, Esker, Lasernet and Reval — plus four
 outside finance services: VAT validation, sanctions screening, an eBanking gateway and an
 exchange-rate service. Nineteen interfaces move data between them. Nobody can answer the question a board actually asks:
 
@@ -203,13 +203,13 @@ gate pass GP-PL01-2026-####  +  vehicle VH-####
 `WGN-#####`, truck `VH-####` or container `CNU-#######`)
 
 ```
-weighed  ──IF-02, 2–6 min──►  Scrap Yard receipt
+weighed  ──IF-02, 2–6 min──►  dOps Core receipt
         │
         │ 8–25 min later: sorted into 1–3 batches whose weights sum exactly to the receipt
         ▼
   scrap_batch (grades SCR-304-BALE, SCR-316L-SOLID, SCR-430-TURN, SCR-321-SHRED)
         ├── 10–30 min: lab sample ──IF-14, 2–6 min──► chemistry (Ni, Cr, Mo near the grade nominal)
-        └──  5–15 min: ──IF-03, 2–5 min──► D365 stock_posting (qty, unit, warehouse RAW)
+        └──  5–15 min: ──IF-03, 2–5 min──► D365 F&O OneCore stock_posting (qty, unit, warehouse RAW)
 ```
 
 **P4 — mill heat** (one every 40–60 minutes)
@@ -282,28 +282,28 @@ engine.subscribe(fn) / getVersion()  // for useSyncExternalStore
 ## 5. The data model
 
 Twenty-two tables across thirteen simulated systems: the nine applications, plus the four outside
-finance services. SAP Service Centre is on the map for landscape completeness and carries no live
+finance services. SAP S/4HANA S&S is on the map for landscape completeness and carries no live
 traffic.
 
 | System | Tables | Key columns |
 |---|---|---|
-| Yard Management | `gate_pass` | gate_pass, site, vehicle, transport, vendor, po, process, arrived |
+| YardLink | `gate_pass` | gate_pass, site, vehicle, transport, vendor, po, process, arrived |
 | | `weighbridge_ticket` | ticket, gate_pass, vehicle, gross_kg, tare_kg, net_kg, registered_tare_kg, weighed |
-| SAP S/4HANA – Steel | `EKPO` | ebeln, vendor, material, price_eur_t, open_qty_kg |
+| SAP S/4HANA Stainless | `EKPO` | ebeln, vendor, material, price_eur_t, open_qty_kg |
 | | `MSEG` | mblnr, **xblnr = gate_pass**, ebeln, menge, meins, posted |
 | | `RBKP` | belnr, ext_invoice, gate_pass, ebeln, qty_kg, amount_eur, status, reason, currency, fx_rate_used, posted |
 | | `AFRU` | rueck, heat, coils, weight_kg, delay_min, received |
 | Esker | `captured_invoice` | doc, ext_invoice, gate_pass, po, qty_kg, amount_eur, captured |
 | Lasernet | `output_document` | doc, type, **ref** (belnr or heat), created |
-| Scrap Yard Operations | `receipt` | receipt, gate_pass, vehicle, site, weight_kg, received |
+| dOps Core | `receipt` | receipt, gate_pass, vehicle, site, weight_kg, received |
 | | `scrap_batch` | batch, receipt, grade, weight_kg, created |
 | | `chemistry` | sample, batch, ni_pct, cr_pct, mo_pct, tested |
 | | `transfer` | transfer, batch, from_site, to_site, weight_kg, received_kg, unit, sent, received |
 | Laboratory app | `lab_result` | sample, batch, grade, status, tested |
-| D365 F&O – Recycling | `stock_posting` | journal, batch, item, qty, unit, warehouse, posted |
+| D365 F&O OneCore | `stock_posting` | journal, batch, item, qty, unit, warehouse, posted |
 | | `issue` | issue, batch, qty_kg, unit, issued |
 | | `quality_order` | order, batch, grade, ni_pct, cr_pct, mo_pct, result, created |
-| Mill Execution System | `heat` | heat, coils, weight_kg, started |
+| Pegase | `heat` | heat, coils, weight_kg, started |
 | Reval | `payment` | pay, belnr, vendor, amount_eur, run_at |
 | VAT validation service | `vat_check` | check, belnr, vendor, vat_number, valid, checked |
 | Sanctions screening service | `sanctions_screen` | screen, belnr, vendor, list_day, list_date, hit, screened |
@@ -329,25 +329,25 @@ heat ──┬─ AFRU.heat
 
 | Id | Carries | From → to | Live |
 |---|---|---|---|
-| IF-01 | Weighbridge ticket | Yard → SAP Steel | ● |
-| IF-02 | Recycling receipt | Yard → Scrap Yard | ● |
-| IF-03 | Stock posting | Scrap Yard → D365 | ● |
-| IF-04 | Production confirmation | Mill → SAP Steel | ● |
-| IF-05 | Delivery note | SAP Steel → Lasernet | ○ |
-| IF-06 | Captured invoice | Esker → SAP Steel | ● |
-| IF-07 | Stock transfer | SAP Steel → SAP Service Centre | ○ |
-| IF-08 | Inventory sync | D365 → SAP Steel | ○ |
-| IF-09 | Invoice copy | SAP Steel → Lasernet | ● |
-| IF-10 | Mill certificate | Mill → Lasernet | ● |
-| IF-11 | Payment file | SAP Steel → Reval | ● |
-| IF-12 | Charge plan | Yard → Mill | ○ |
-| IF-13 | Recycling documents | D365 → Lasernet | ● |
-| IF-14 | Chemistry result | Laboratory → Scrap Yard | ● |
-| IF-15 | VAT validation | SAP Steel → VAT service | ● |
-| IF-16 | Sanctions screening | SAP Steel → Sanctions service | ● |
-| IF-17 | Payment instruction | SAP Steel → eBanking gateway | ● |
-| IF-18 | Exchange rates | Exchange-rate service → SAP Steel | ● |
-| IF-19 | Stock transfer | Scrap Yard → D365 | ● |
+| IF-01 | Weighbridge ticket | YardLink → SAP S/4HANA Stainless | ● |
+| IF-02 | Recycling receipt | YardLink → dOps Core | ● |
+| IF-03 | Stock posting | dOps Core → D365 F&O OneCore | ● |
+| IF-04 | Production confirmation | Pegase → SAP S/4HANA Stainless | ● |
+| IF-05 | Delivery note | SAP S/4HANA Stainless → Lasernet | ○ |
+| IF-06 | Captured invoice | Esker → SAP S/4HANA Stainless | ● |
+| IF-07 | Stock transfer | SAP S/4HANA Stainless → SAP S/4HANA S&S | ○ |
+| IF-08 | Inventory sync | D365 F&O OneCore → SAP S/4HANA Stainless | ○ |
+| IF-09 | Invoice copy | SAP S/4HANA Stainless → Lasernet | ● |
+| IF-10 | Pegase certificate | Pegase → Lasernet | ● |
+| IF-11 | Payment file | SAP S/4HANA Stainless → Reval | ● |
+| IF-12 | Charge plan | YardLink → Pegase | ○ |
+| IF-13 | Recycling documents | D365 F&O OneCore → Lasernet | ● |
+| IF-14 | Chemistry result | Laboratory → dOps Core | ● |
+| IF-15 | VAT validation | SAP S/4HANA Stainless → VAT service | ● |
+| IF-16 | Sanctions screening | SAP S/4HANA Stainless → Sanctions service | ● |
+| IF-17 | Payment instruction | SAP S/4HANA Stainless → eBanking gateway | ● |
+| IF-18 | Exchange rates | Exchange-rate service → SAP S/4HANA Stainless | ● |
+| IF-19 | Stock transfer | dOps Core → D365 F&O OneCore | ● |
 
 Fifteen carry live traffic; the four marked ○ exist so the landscape is complete and are drawn
 dashed on the map. Screens that measure agreement count only the live ones rather than counting
@@ -372,7 +372,7 @@ plain-language cause**.
 | C6b | Issued kilograms never exceed stock | `stock_posting` ↔ `issue` | F6 |
 | C7 | Invoices pass the three-way match | `RBKP` | F1, F2, F7 |
 | C8 | Every booking has its document in Lasernet | `RBKP`, `stock_posting` ↔ `output_document` | — |
-| C9 | Mill confirmations arrive within 15 minutes | `heat` ↔ `AFRU` | F8 |
+| C9 | Pegase confirmations arrive within 15 minutes | `heat` ↔ `AFRU` | F8 |
 | C10 | Every vendor paid was screened against today's sanctions list | `RBKP` ↔ `sanctions_screen` | F9 |
 | C11 | Every foreign-currency invoice used that day's exchange rate | `RBKP` ↔ `fx_rate` | F10 |
 | C12 | Transfers arrive with the same weight | `transfer` | F6 |
@@ -699,7 +699,7 @@ both of which go into the evidence pack. Findings are filterable by severity and
 filter. Evidence lists locked, hashed bundles.
 
 **Schedules** is what makes it a factory rather than a demo: five seeded schedules (nightly at
-02:00, after every SAP transport, after every D365 update, before the month-end close, weekly),
+02:00, after every SAP transport, after every D365 F&O OneCore update, before the month-end close, weekly),
 each with what it runs, its project, its last result, its next run and an on/off switch. **Run now**
 starts a real run in the Run Centre, records the verdict against the schedule and sends the report
 to the people named on it, with a link to the run. **New schedule** adds one.

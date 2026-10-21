@@ -664,7 +664,7 @@ export function RecordPage() {
   const toast = useToast()
   const appState = useStore()
   const [workflow, setWorkflow] = useState('P1')
-  const [system, setSystem] = useState('Yard Management')
+  const [system, setSystem] = useState('YardLink')
   const [phase, setPhase] = useState<RecordPhase>('idle')
   const [count, setCount] = useState(0)
 
@@ -751,12 +751,12 @@ export function RecordPage() {
             <label className="mb-1 block text-label font-semibold uppercase text-subtle">System</label>
             <Select value={system} onChange={(e) => setSystem(e.target.value)} disabled={phase === 'recording'}>
               {[
-                'Yard Management',
-                'Scrap Yard Operations',
+                'YardLink',
+                'dOps Core',
                 'Laboratory app',
-                'SAP S/4HANA – Steel',
+                'SAP S/4HANA Stainless',
                 'Esker',
-                'D365 F&O – Recycling',
+                'D365 F&O OneCore',
               ].map((s) => (
                 <option key={s}>{s}</option>
               ))}
@@ -951,7 +951,7 @@ export function MasterDataPage() {
         id: `MD-${vehicle}`,
         objectType: 'Vehicle',
         object: vehicle,
-        system: 'Yard Management',
+        system: 'YardLink',
         problem: `Stored empty weight ${num(row.stored)} kg, last weighed ${num(average)} kg — ${num(drift)} kg out.`,
         risk: drift > 1000 ? 'High' : 'Medium',
         fix: 'Re-weigh the vehicle empty and update the vehicle master, so a message that uses the stored weight is still right.',

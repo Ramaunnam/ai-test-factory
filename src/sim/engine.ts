@@ -24,42 +24,42 @@ export const FAULTS: FaultDef[] = [
   {
     id: 'F1',
     label: 'Kilogram / tonne mix-up',
-    where: 'IF-01 Yard Management to SAP Steel',
+    where: 'IF-01 YardLink to SAP S/4HANA Stainless',
     breaks: 'The net weight is divided by 1000 but still labelled KG, so SAP books 21.92 KG instead of 21 920 kg.',
     rate: 0.08,
   },
   {
     id: 'F2',
     label: 'Stale tare weight',
-    where: 'IF-01 Yard Management to SAP Steel',
+    where: 'IF-01 YardLink to SAP S/4HANA Stainless',
     breaks: 'The message uses the registered tare from the vehicle master instead of the tare just weighed.',
     rate: 0.07,
   },
   {
     id: 'F3',
     label: 'Gateway retry duplicate',
-    where: 'IF-01 Yard Management to SAP Steel',
+    where: 'IF-01 YardLink to SAP S/4HANA Stainless',
     breaks: 'The same ticket is delivered twice, so SAP holds two goods receipts for one truck.',
     rate: 0.05,
   },
   {
     id: 'F4',
     label: 'Lost message',
-    where: 'IF-02 Yard Management to Scrap Yard',
+    where: 'IF-02 YardLink to dOps Core',
     breaks: 'The recycling receipt never arrives, so the load exists in the yard but nowhere else.',
     rate: 0.06,
   },
   {
     id: 'F5',
     label: 'Molybdenum field renamed',
-    where: 'IF-14 Laboratory to Scrap Yard',
+    where: 'IF-14 Laboratory to dOps Core',
     breaks: 'mo_pct arrives empty, so the chemistry record is incomplete and the grade cannot be certified.',
     rate: 0.2,
   },
   {
     id: 'F6',
     label: 'Tonnes not converted to kilograms',
-    where: 'IF-03 and IF-19 Scrap Yard to D365',
+    where: 'IF-03 and IF-19 dOps Core to D365 F&O OneCore',
     breaks:
       'Received in tonnes at the yard, issued in kilograms in stock. The × 1000 step is skipped, so stock is 1 000 times wrong.',
     rate: 0.07,
@@ -67,28 +67,28 @@ export const FAULTS: FaultDef[] = [
   {
     id: 'F7',
     label: 'No purchase order on capture',
-    where: 'IF-06 Esker to SAP Steel',
+    where: 'IF-06 Esker to SAP S/4HANA Stainless',
     breaks: 'The captured invoice carries no PO reference, so the three-way match parks it.',
     rate: 0.06,
   },
   {
     id: 'F8',
-    label: 'Late mill file',
-    where: 'IF-04 Mill to SAP Steel',
+    label: 'Late Pegase file',
+    where: 'IF-04 Pegase to SAP S/4HANA Stainless',
     breaks: 'The production confirmation takes 25 to 45 minutes instead of 3 to 10.',
     rate: 0.25,
   },
   {
     id: 'F9',
     label: 'Sanctions list not refreshed',
-    where: 'IF-16 SAP Steel to the sanctions screening service',
+    where: 'IF-16 SAP S/4HANA Stainless to the sanctions screening service',
     breaks: 'The vendor is screened against yesterday’s list, so a name added today is not seen before the invoice is booked.',
     rate: 0.03,
   },
   {
     id: 'F10',
     label: 'Exchange rate missing',
-    where: 'IF-18 exchange-rate service to SAP Steel',
+    where: 'IF-18 exchange-rate service to SAP S/4HANA Stainless',
     breaks: 'No rate file arrives for the day, so foreign-currency invoices are booked at yesterday’s rate.',
     rate: 0.1,
   },
@@ -594,7 +594,7 @@ class SimEngine {
       fault: lost ? 'F4' : undefined,
       effect: () => {
         const receipt = this.id('RC-', 5)
-        // Scrap Yard Operations converts the tonnes to kilograms
+        // dOps Core converts the tonnes to kilograms
         this.db.receipt.push({
           receipt,
           gate_pass,
@@ -683,7 +683,7 @@ class SimEngine {
             })
             if (notConverted) {
               this.log(
-                `D365 booked ${batch} as ${qty} KG instead of ${fmt(share)} KG — tonnes were not converted`,
+                `D365 F&O OneCore booked ${batch} as ${qty} KG instead of ${fmt(share)} KG — tonnes were not converted`,
                 key,
                 'danger',
               )
@@ -747,8 +747,8 @@ class SimEngine {
     })
     this.log(
       result === 'Incomplete'
-        ? `D365 could not complete the quality order for ${batch}: the chemistry is incomplete`
-        : `D365 quality order for ${batch}: ${result} against ${grade}`,
+        ? `D365 F&O OneCore could not complete the quality order for ${batch}: the chemistry is incomplete`
+        : `D365 F&O OneCore quality order for ${batch}: ${result} against ${grade}`,
       key,
       result === 'Pass' ? 'success' : result === 'Fail' ? 'warning' : 'danger',
     )
@@ -803,7 +803,7 @@ class SimEngine {
     const coils = this.rng.int(2, 4)
     const weight = this.rng.step(18000, 32000, 20)
     this.db.heat.push({ heat, coils, weight_kg: weight, started: this.now })
-    this.log(`Mill finished heat ${heat} with ${coils} coils (${fmt(weight)} kg)`, heat)
+    this.log(`Pegase finished heat ${heat} with ${coils} coils (${fmt(weight)} kg)`, heat)
 
     const late = this.fault('F8')
     const travel = late ? this.rng.int(25, 45) : this.rng.int(3, 10)
@@ -834,13 +834,13 @@ class SimEngine {
       from: 'Mill',
       to: 'Lasernet',
       key: heat,
-      summary: `Mill certificate ${heat}`,
+      summary: `Pegase certificate ${heat}`,
       payload: { interface: 'IF-10', heat, coils },
       travel: this.rng.int(2, 6),
       effect: () => {
         this.db.output_document.push({
           doc: this.id('LN-', 5),
-          type: 'Mill certificate',
+          type: 'Pegase certificate',
           ref: heat,
           created: this.now,
         })

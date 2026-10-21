@@ -78,21 +78,21 @@ export const MAP_V1: ProcessMapVersion = {
     {
       id: 'M1',
       name: 'Gate and weighbridge',
-      system: 'Yard Management',
+      system: 'YardLink',
       note: 'Gate pass, gross weight, tare weight, release.',
       stageId: 'P1-S1',
     },
     {
       id: 'M2',
       name: 'Goods receipt',
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       note: 'The weighbridge ticket becomes a delivery booking.',
       stageId: 'P1-S2',
     },
     {
       id: 'M3',
       name: 'Invoice capture',
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       note: 'The supplier invoice is read and the lines typed in.',
       stageId: 'P1-S3',
     },
@@ -106,7 +106,7 @@ export const MAP_V1: ProcessMapVersion = {
     {
       id: 'M4',
       name: 'Invoice posting',
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       note: 'Order, delivery and invoice are matched, then posted.',
       stageId: 'P1-S4',
     },
@@ -136,14 +136,14 @@ export const MAP_V2: ProcessMapVersion = {
     {
       id: 'M1',
       name: 'Gate and weighbridge',
-      system: 'Yard Management',
+      system: 'YardLink',
       note: 'Gate pass, gross weight, tare weight, release.',
       stageId: 'P1-S1',
     },
     {
       id: 'M1b',
       name: 'Deviation check at the gate',
-      system: 'Yard Management',
+      system: 'YardLink',
       note: 'Anything more than 20 kg off the delivery note is queried before the vehicle leaves.',
       stageId: 'P1-S1',
       added: true,
@@ -151,7 +151,7 @@ export const MAP_V2: ProcessMapVersion = {
     {
       id: 'M2',
       name: 'Goods receipt',
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       note: 'The weighbridge ticket becomes a delivery booking.',
       stageId: 'P1-S2',
     },
@@ -165,7 +165,7 @@ export const MAP_V2: ProcessMapVersion = {
     {
       id: 'M4',
       name: 'Invoice posting',
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       note: 'Order, delivery and invoice are matched, then posted.',
       stageId: 'P1-S4',
     },
@@ -218,7 +218,7 @@ export const MAP_CORRECTIONS = [
     id: 'C2',
     reason: 'Wrong system' as FeedbackReason,
     what: 'Invoice capture was drawn on the wrong system',
-    before: 'Invoice capture in SAP S/4HANA – Steel',
+    before: 'Invoice capture in SAP S/4HANA Stainless',
     after: 'Invoice capture in Esker',
   },
   {
@@ -242,7 +242,7 @@ export const APPLY_LOG = [
 
 export const DISCOVERY_LINES = [
   'Reading 6 recorded key-user sessions (123 steps in total)…',
-  'Reading the plant log from Yard Management, SAP, Esker and the laboratory…',
+  'Reading the plant log from YardLink, SAP, Esker and the laboratory…',
   'Reading 4 standard operating procedures…',
   'Grouping steps into activities by screen and action…',
   'Ordering activities by the timestamps in the log…',

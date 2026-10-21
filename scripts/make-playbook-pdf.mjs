@@ -121,6 +121,11 @@ const CSS = `
   /* ------------------------------------------------------------------ toc -- */
   .toc { page-break-after: always; }
   .toc h2 { font-size: 17pt; color: var(--steel); margin: 0 0 6mm 0; }
+  /* the two lines that used to open the document, now sharing this page
+     instead of sitting alone on one of their own */
+  .toc .intro { margin: 0 0 7mm 0; padding-bottom: 6mm; border-bottom: 0.6pt solid var(--line); }
+  .toc .intro p { font-size: 10pt; color: var(--muted); margin: 0 0 2mm 0; }
+  .toc .intro p:last-child { margin-bottom: 0; }
   .toc ol { list-style: none; margin: 0; padding: 0; }
   .toc li { margin: 0 0 2.6mm 0; break-inside: avoid; }
   .toc a {
@@ -150,7 +155,7 @@ const CSS = `
 
   /* ---------------------------------------------------------------- tables -- */
   table {
-    width: 100%; border-collapse: collapse; margin: 0 0 4mm 0;
+    width: 100%; max-width: 100%; border-collapse: collapse; margin: 0 0 4mm 0;
     font-size: 9.5pt; line-height: 1.38; table-layout: auto;
   }
   thead { display: table-header-group; }
@@ -158,8 +163,10 @@ const CSS = `
   th {
     background: var(--grey); color: #10202f; font-weight: 600; text-align: left;
     border: 0.6pt solid var(--line); padding: 1.6mm 2mm;
-    /* a header on one line gives its column a sensible minimum width */
-    white-space: nowrap;
+    /* a header is allowed to wrap, like a cell, so a wide table can still be
+       squeezed into the page instead of running past the right margin, which
+       is what was leaving the right border out of the printed page */
+    white-space: normal; overflow-wrap: break-word; word-break: break-word;
   }
   /* break-word, never anywhere: "Sanctions" must not come out as "Sanction s" */
   td { border: 0.6pt solid var(--line); padding: 1.5mm 2mm; vertical-align: top; overflow-wrap: break-word; }
@@ -182,7 +189,7 @@ const CSS = `
   blockquote p:last-child { margin-bottom: 0; }
 `
 
-function buildHtml(bodyHtml, sections, pages, today) {
+function buildHtml(bodyHtml, sections, pages, today, introHtml) {
   const toc = sections
     .map(
       (s, i) =>
@@ -207,12 +214,12 @@ function buildHtml(bodyHtml, sections, pages, today) {
     <div>${today}</div>
     <div class="tag">J2W · Internal</div>
   </div>
-  <div class="foot">Simulated demonstration environment. All data is mock data; no real company, person,
-  location or in-house system name appears in this document.</div>
+  <div class="foot">Simulated demonstration environment. All data is mock data.</div>
 </section>
 
 <section class="toc">
   <h2>Contents</h2>
+  <div class="intro">${introHtml || ''}</div>
   <ol>${toc}</ol>
 </section>
 
@@ -281,6 +288,22 @@ async function render(browser, html) {
     document.querySelectorAll('td, th').forEach((cell) => {
       const t = (cell.textContent || '').trim()
       if (t.length <= 10 && !t.includes(' ')) cell.style.whiteSpace = 'nowrap'
+    })
+
+    /* Letting every header wrap (above) fits almost every table, but a row
+       that still has a few long, unbreakable cells (a table name, a path)
+       can hold a table a little wider than the page. Shrink just that
+       table's own type until it is back inside the margin — table.scrollWidth
+       reports the table's real width even though nothing clips it, so this
+       runs before the overflow check below ever sees it. */
+    const pageWidth = document.body.clientWidth
+    document.querySelectorAll('table').forEach((t) => {
+      let size = 9.5
+      while (t.scrollWidth > pageWidth + 0.5 && size > 7) {
+        size = Math.round((size - 0.1) * 10) / 10
+        t.style.fontSize = size + 'pt'
+      }
+      if (size < 9.5) fitted.push({ table: true, size })
     })
 
     const overflow = [...document.querySelectorAll('pre, table, td, th')]
@@ -369,11 +392,19 @@ async function main() {
   const markdown = readFileSync(SOURCE, 'utf8').split(/\r\n|\r|\n/).join('\n')
   const sections = readSections(markdown)
 
+  /* The two lines under the title, before the table of contents, used to
+     render as their own thin page (the cover already carries the title, so
+     this was just two short paragraphs). Pulled out here and rendered on
+     the contents page instead, so the two share one page. */
+  const frontMatter = /^# .+\n\n([\s\S]*?)\n\n---\n\n(?=## Table of contents)/.exec(markdown)
+  const withoutFrontMatter = frontMatter ? markdown.slice(frontMatter[0].length) : markdown
+
   /* The contents page is built from the headings, so the list the markdown
      carries at the top would be a second, stale copy of it. Drop it. */
-  const withoutToc = markdown.replace(/^## Table of contents[\s\S]*?(?=^## )/m, '')
+  const withoutToc = withoutFrontMatter.replace(/^## Table of contents[\s\S]*?(?=^## )/m, '')
 
   marked.setOptions({ gfm: true, breaks: false })
+  const introHtml = frontMatter ? marked.parse(frontMatter[1]) : ''
   let n = 0
   const renderer = new marked.Renderer()
   const heading = renderer.heading.bind(renderer)
@@ -396,11 +427,11 @@ async function main() {
 
   try {
     // pass 1 — no page numbers yet, just to see where the sections land
-    const first = await render(browser, buildHtml(bodyHtml, sections, null, today))
+    const first = await render(browser, buildHtml(bodyHtml, sections, null, today, introHtml))
     const found = await sectionPages(first.pdf, sections, require)
 
     // pass 2 — the same document, with the real page numbers in the contents
-    const second = await render(browser, buildHtml(bodyHtml, sections, found.pages, today))
+    const second = await render(browser, buildHtml(bodyHtml, sections, found.pages, today, introHtml))
     const check = await sectionPages(second.pdf, sections, require)
     const moved = sections.filter((_, i) => check.pages[i] !== found.pages[i])
 
@@ -413,9 +444,10 @@ async function main() {
     console.log(`  pages     ${check.numPages}`)
     console.log(`  size      ${(size / 1024 / 1024).toFixed(2)} MB (${size.toLocaleString('en-GB')} bytes)`)
     console.log(`  sections  ${sections.length}, contents page numbers ${moved.length ? 'SHIFTED' : 'correct'}`)
-    if (second.fitted.length) {
-      console.log(`  shrunk    ${second.fitted.length} code block(s) so nothing is cut off at the right edge`)
-    }
+    const shrunkCode = second.fitted.filter((f) => !f.table).length
+    const shrunkTables = second.fitted.filter((f) => f.table).length
+    if (shrunkCode) console.log(`  shrunk    ${shrunkCode} code block(s) so nothing is cut off at the right edge`)
+    if (shrunkTables) console.log(`  shrunk    ${shrunkTables} table(s) so every border stays on the page`)
     if (second.overflow.length) {
       console.log(`  WARNING   ${second.overflow.length} block(s) still overflow:`)
       second.overflow.forEach((o) => console.log(`              ${o}`))

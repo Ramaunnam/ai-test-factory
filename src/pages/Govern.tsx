@@ -184,7 +184,7 @@ export function AccessSodPage() {
                 status: 'Open',
                 process: 'P3',
                 stage: 'Purchase order',
-                system: 'SAP S/4HANA – Steel',
+                system: 'SAP S/4HANA Stainless',
                 raised: new Date().toLocaleString('en-GB'),
                 raisedBy: 'Access agent',
                 detail: `${rule.why} The proof run completed both actions as ${conflictUser} with no block.`,

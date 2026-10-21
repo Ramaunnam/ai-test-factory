@@ -446,9 +446,9 @@ function liveBatchRows(): ReconRow[] {
           { field: 'recorded', source: fmtSim(b.created), target: posting ? fmtSim(posting.posted) : null },
         ],
         reason: !posting
-          ? 'Nothing was posted to D365 for this batch, so the yard holds material the warehouse does not know about.'
+          ? 'Nothing was posted to D365 F&O OneCore for this batch, so the yard holds material the warehouse does not know about.'
           : wrongUnit
-            ? `The quantity is right but the unit says ${posting.unit}. D365 understates this batch by a factor of a thousand, and the warehouse total with it. The message arrived that way on IF-03.`
+            ? `The quantity is right but the unit says ${posting.unit}. D365 F&O OneCore understates this batch by a factor of a thousand, and the warehouse total with it. The message arrived that way on IF-03.`
             : wrongQty
               ? 'The posted quantity does not match the weight the yard recorded for this batch.'
               : undefined,
@@ -460,13 +460,13 @@ function liveBatchRows(): ReconRow[] {
               ? 'Compare the sortation record with the journal and correct the posting.'
               : undefined,
         sourceRef: {
-          system: 'Scrap Yard Operations',
+          system: 'dOps Core',
           table: 'scrap.scrap_batch',
           note: `sorted from receipt ${b.receipt}`,
           route: '/flow/data?system=scrap&table=scrap_batch',
         },
         targetRef: {
-          system: 'D365 F&O – Recycling',
+          system: 'D365 F&O OneCore',
           table: 'd365.stock_posting',
           note: posting ? `journal ${posting.journal}, posted ${fmtSim(posting.posted)}` : 'no row was written',
           route: '/flow/data?system=d365&table=stock_posting',
@@ -515,7 +515,7 @@ function liveInvoiceRows(): ReconRow[] {
             ? 'No action on the interface. Resolve the park itself: live check C7 lists every parked invoice with its reason.'
             : 'No action. Re-check after the next hourly payment run.',
         sourceRef: {
-          system: 'SAP S/4HANA – Steel',
+          system: 'SAP S/4HANA Stainless',
           table: 'sap.rbkp',
           note: `invoice ${r.ext_invoice} against gate pass ${r.gate_pass}`,
           route: '/flow/data?system=sap-steel&table=RBKP',
@@ -765,7 +765,7 @@ export function ReconciliationPage() {
               }
               computes={
                 set.liveSource === 'batches'
-                  ? 'joins every batch to its D365 journal on the batch number, then compares quantity, unit and warehouse'
+                  ? 'joins every batch to its D365 F&O OneCore journal on the batch number, then compares quantity, unit and warehouse'
                   : 'joins every invoice to its Reval payment on the document number, then compares status and amount'
               }
               feeds={[{ label: 'Confidence score', route: '/' }, { label: 'Release gate', route: '/release' }]}

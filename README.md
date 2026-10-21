@@ -5,7 +5,7 @@ landscape. There is no backend. The plant, the ten systems, the four outside fin
 every message between them are simulated in the browser, so the failures you see on screen are
 produced by the simulation rather than hard-coded.
 
-All data is mock data. No real company, person, location or in-house system name appears anywhere.
+All data is mock data. No real company, person or location name appears anywhere.
 
 ## Run it
 

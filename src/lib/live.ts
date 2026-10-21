@@ -99,8 +99,8 @@ export function interfaceTraffic(minutes = 60) {
       return {
         id: i.id,
         name: i.name,
-        from: SYSTEMS.find((s) => s.id === i.from)?.short ?? i.from,
-        to: SYSTEMS.find((s) => s.id === i.to)?.short ?? i.to,
+        from: SYSTEMS.find((s) => s.id === i.from)?.name ?? i.from,
+        to: SYSTEMS.find((s) => s.id === i.to)?.name ?? i.to,
         count: msgs.length,
         damaged: msgs.filter((m) => m.fault || m.status === 'lost' || m.status === 'duplicate').length,
       }

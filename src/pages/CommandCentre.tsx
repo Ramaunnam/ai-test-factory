@@ -383,11 +383,11 @@ const LOAD_BASE: Record<string, { perMin: number; p95: number; headroom: number 
 const BOTTLENECK_IMPACT: Record<string, string> = {
   'IF-01': 'Trucks wait at the gate because the goods receipt is not booked while they are still on the weighbridge.',
   'IF-02': 'Recycling loads sit in the yard with nothing recorded against them.',
-  'IF-03': 'Stock in D365 lags the yard, so the month-end stock value is wrong on the day it is read.',
+  'IF-03': 'Stock in D365 F&O OneCore lags the yard, so the month-end stock value is wrong on the day it is read.',
   'IF-04': 'Production confirmations arrive late, so the shift report understates output.',
   'IF-06': 'Supplier invoices queue behind the close, and the last ones miss the cut-off.',
   'IF-09': 'Invoice copies are late, so the document archive is incomplete at the close.',
-  'IF-10': 'Mill certificates are late, which holds up dispatch.',
+  'IF-10': 'Pegase certificates are late, which holds up dispatch.',
   'IF-11': 'The payment run misses its slot and suppliers are paid a day late.',
   'IF-14': 'Batches wait for their chemistry before they can be certified and charged.',
 }
@@ -1171,7 +1171,7 @@ export function SimulatorPage() {
                     tone === 'danger' ? 'border-danger/50 bg-danger-soft/40' : tone === 'warning' ? 'border-accent/50 bg-accent-soft/40' : 'border-line',
                   )}
                 >
-                  <div className="truncate text-sm font-medium text-text">{s.short}</div>
+                  <div className="truncate text-sm font-medium text-text">{s.name}</div>
                   <div className="truncate text-xs text-muted">
                     {tone === 'danger' ? 'changed' : tone === 'warning' ? 'feels it downstream' : 'not touched'}
                   </div>

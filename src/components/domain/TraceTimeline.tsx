@@ -5,6 +5,7 @@ import { fmtSim } from '@/lib/format'
 import { useMoney } from '@/lib/currency'
 import type { TraceResult } from '@/sim/trace'
 import type { Message } from '@/sim/types'
+import { systemBySim } from '@/data/systems'
 
 function MessageHop({ m }: { m: Message }) {
   const tone =
@@ -21,7 +22,7 @@ function MessageHop({ m }: { m: Message }) {
         <span className="font-mono font-semibold text-text">{m.interfaceId}</span>
         <span className="min-w-0 flex-1 truncate text-muted">{m.summary}</span>
         <span className="font-mono text-[11px] text-subtle">
-          {m.from} → {m.to}
+          {systemBySim(m.from).name} → {systemBySim(m.to).name}
         </span>
         <span className="font-mono text-[11px] text-subtle">{Math.round(m.arriveAt - m.sentAt)} min</span>
         <Badge tone={tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'info'}>{m.status}</Badge>
@@ -48,7 +49,7 @@ export function TraceTimeline({ result }: { result: TraceResult }) {
               <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-2.5">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <Badge tone={r.flagged ? 'danger' : 'neutral'}>{r.system}</Badge>
+                    <Badge tone={r.flagged ? 'danger' : 'neutral'}>{systemBySim(r.system).name}</Badge>
                     <span className="truncate text-sm font-medium text-text">{r.title}</span>
                   </div>
                   <div className="mt-0.5 font-mono text-[11px] text-subtle">

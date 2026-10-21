@@ -886,7 +886,7 @@ export function SchedulesPage() {
             { label: 'Command Centre', route: '/' },
           ]}
           steps={[
-            'A trigger fires: the clock, a SAP transport, a D365 update or the month-end close.',
+            'A trigger fires: the clock, a SAP transport, a D365 F&O OneCore update or the month-end close.',
             'The scenarios approved for that project are run in the same order every time.',
             'The verdict is kept against the schedule, and the run appears in Evidence & Reports.',
             'The report is sent to the people named on the schedule, with a link to the run.',

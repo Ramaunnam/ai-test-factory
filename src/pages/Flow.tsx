@@ -38,7 +38,7 @@ import { engine, FAULTS } from '@/sim/engine'
 import { runAllChecks, runCheck, checkSummary, type CheckResult } from '@/sim/checks'
 import { useSim, useSimVersion } from '@/sim/useSim'
 import { trace, traceSuggestions } from '@/sim/trace'
-import { INTERFACES, SYSTEMS, SYSTEM_TABLES_BY_SYSTEM, interfaceById } from '@/data/flowHelpers'
+import { INTERFACES, SYSTEMS, SYSTEM_TABLES_BY_SYSTEM, interfaceById, systemBySim } from '@/data/flowHelpers'
 import { useProjectFilter } from '@/data/projects'
 import { fmtSim, num } from '@/lib/format'
 import { useDrawer } from '@/providers/DrawerProvider'
@@ -103,7 +103,7 @@ function useMessageDrawer() {
   return (m: Message) => {
     drawer.open({
       title: `${m.interfaceId} · ${m.summary}`,
-      subtitle: `${m.from} → ${m.to} · sent ${fmtSim(m.sentAt)} · arrives ${fmtSim(m.arriveAt)}`,
+      subtitle: `${systemBySim(m.from).name} → ${systemBySim(m.to).name} · sent ${fmtSim(m.sentAt)} · arrives ${fmtSim(m.arriveAt)}`,
       width: 'md',
       content: (
         <div className="space-y-4">
@@ -365,7 +365,7 @@ export function LiveFlowPage() {
             { key: 'sentAt', header: 'Sent', mono: true, width: 110, render: (m) => fmtSim(m.sentAt), value: (m) => m.sentAt },
             { key: 'interfaceId', header: 'Interface', mono: true, width: 90 },
             { key: 'summary', header: 'What moved' },
-            { key: 'route', header: 'From → to', width: 240, render: (m) => `${m.from} → ${m.to}`, value: (m) => m.from },
+            { key: 'route', header: 'From → to', width: 240, render: (m) => `${systemBySim(m.from).name} → ${systemBySim(m.to).name}`, value: (m) => m.from },
             { key: 'status', header: 'Status', width: 110, render: (m) => (
               <Badge tone={m.status === 'delivered' ? 'success' : m.status === 'lost' ? 'danger' : m.status === 'duplicate' ? 'warning' : 'info'}>
                 {m.status}
@@ -447,7 +447,7 @@ export function SystemDataPage() {
         {liveSystems.map((s) => (
           <StatTile
             key={s.id}
-            label={s.short}
+            label={s.name}
             value={num(counts[s.id] ?? 0)}
             tone={failing[s.id] ? 'danger' : 'neutral'}
             hint={failing[s.id] ? `${failing[s.id]} failing records` : 'data agrees'}

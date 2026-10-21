@@ -26,11 +26,11 @@ export const RUN_STEPS: RunStep[] = [
     scenario: 'SC-001',
     stageId: 'P1-S1',
     text: 'Create a gate pass for VH-7741 at PL01',
-    system: 'Yard Management',
+    system: 'YardLink',
     outcome: 'pass',
     technical: "page.goto('/yard/gate-pass/new')",
     screen: {
-      system: 'Yard Management',
+      system: 'YardLink',
       title: 'Gate pass · new',
       fields: [
         { label: 'Gate pass', value: 'GP-PL01-2026-4182', highlight: true },
@@ -42,7 +42,7 @@ export const RUN_STEPS: RunStep[] = [
       action: 'Save',
     },
     logs: [
-      { at: '00:00.0', action: 'Open Yard Management, gate pass screen', result: 'screen ready' },
+      { at: '00:00.0', action: 'Open YardLink, gate pass screen', result: 'screen ready' },
       { at: '00:01.2', action: 'Enter vehicle VH-7741 and vendor VEND-1042', result: 'fields accepted' },
       { at: '00:02.4', action: 'Save the gate pass', result: 'GP-PL01-2026-4182 created' },
     ],
@@ -51,11 +51,11 @@ export const RUN_STEPS: RunStep[] = [
     scenario: 'SC-001',
     stageId: 'P1-S1',
     text: 'Weigh gross 38 420 kg and tare 13 560 kg',
-    system: 'Yard Management',
+    system: 'YardLink',
     outcome: 'pass',
     technical: "fill('#gross','38420'); fill('#tare','13560')",
     screen: {
-      system: 'Yard Management',
+      system: 'YardLink',
       title: 'Weighbridge · GP-PL01-2026-4182',
       fields: [
         { label: 'Gross weight', value: '38 420 kg', highlight: true },
@@ -75,13 +75,13 @@ export const RUN_STEPS: RunStep[] = [
     scenario: 'SC-001',
     stageId: 'P1-S1',
     text: 'Read the net weight from the ticket',
-    system: 'Yard Management',
+    system: 'YardLink',
     outcome: 'healed',
     detail:
       'The field was renamed. Self-healing mapped netWeightKg to net_weight_kg with 96 % confidence and the step continued.',
     technical: 'expect(payload.net_weight_kg ?? payload.netWeightKg).toBe(24860)',
     screen: {
-      system: 'Yard Management',
+      system: 'YardLink',
       title: 'Weighbridge ticket · WB-00412',
       fields: [
         { label: 'Ticket', value: 'WB-00412' },
@@ -100,11 +100,11 @@ export const RUN_STEPS: RunStep[] = [
     scenario: 'SC-001',
     stageId: 'P1-S2',
     text: 'Send the ticket on IF-01 and wait for SAP',
-    system: 'SAP S/4HANA – Steel',
+    system: 'SAP S/4HANA Stainless',
     outcome: 'pass',
     technical: 'queue.publish("IF-01", payload)',
     screen: {
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       title: 'Goods receipt · 5000001234',
       fields: [
         { label: 'Material document', value: '5000001234' },
@@ -124,11 +124,11 @@ export const RUN_STEPS: RunStep[] = [
     scenario: 'SC-001',
     stageId: 'P1-S2',
     text: 'Check that exactly one goods receipt exists',
-    system: 'SAP S/4HANA – Steel',
+    system: 'SAP S/4HANA Stainless',
     outcome: 'pass',
     technical: "odata.get('/MSEG?$filter=xblnr eq {gatePass}')",
     screen: {
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       title: 'Material documents for GP-PL01-2026-4182',
       fields: [
         { label: 'Documents found', value: '1', highlight: true },
@@ -145,13 +145,13 @@ export const RUN_STEPS: RunStep[] = [
     scenario: 'SC-004',
     stageId: 'P1-S2',
     text: 'Compare the last 50 weighbridge tickets against SAP',
-    system: 'SAP S/4HANA – Steel',
+    system: 'SAP S/4HANA Stainless',
     outcome: 'fail',
     detail:
       'Three trucks were booked with the wrong weight. Two are a kilogram / tonne mix-up and one used a stale tare. Raised as finding F-001.',
     technical: 'expect(abs(net_kg - menge)).toBeLessThan(20)',
     screen: {
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       title: 'Weight comparison · last 50 tickets',
       fields: [
         { label: 'Tickets compared', value: '50' },
@@ -199,11 +199,11 @@ export const RUN_STEPS: RunStep[] = [
     scenario: 'SC-002',
     stageId: 'P1-S4',
     text: 'Post a clean supplier invoice through the three-way match',
-    system: 'SAP S/4HANA – Steel',
+    system: 'SAP S/4HANA Stainless',
     outcome: 'pass',
     technical: 'sap.run("MIRO")',
     screen: {
-      system: 'SAP S/4HANA – Steel',
+      system: 'SAP S/4HANA Stainless',
       title: 'Invoice posting · MIRO',
       fields: [
         { label: 'Invoice', value: '5100004412' },

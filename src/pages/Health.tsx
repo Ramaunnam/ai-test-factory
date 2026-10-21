@@ -429,7 +429,7 @@ export function HealthPage() {
                 onClick={() => navigate(`/flow/data?system=${s.id}`)}
                 className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface2"
               >
-                <span className="w-28 shrink-0 truncate text-xs text-text">{s.short}</span>
+                <span className="w-28 shrink-0 truncate text-xs text-text">{s.name}</span>
                 <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-surface2">
                   <span
                     className="block h-full rounded-full bg-primary transition-[width] duration-500"

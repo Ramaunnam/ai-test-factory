@@ -3,7 +3,7 @@ import { ALL_PROJECTS } from './projects'
 export const SCHEDULE_WHEN = [
   'Nightly at 02:00',
   'After every SAP transport',
-  'After every D365 update',
+  'After every D365 F&O OneCore update',
   'Before the month-end close',
   'Weekly on Sunday',
 ] as const
@@ -66,13 +66,13 @@ export const SEED_SCHEDULES: Schedule[] = [
     id: 'SCH-03',
     name: 'Recycling smoke test',
     what: 'Scrap to stock, quality orders and yard transfers',
-    when: 'After every D365 update',
+    when: 'After every D365 F&O OneCore update',
     project: 'd365-recycling',
     scenarios: 8,
     lastResult: 'FAIL',
     lastRun: '16 Oct 2026 11:05',
     lastRunId: 'RUN-1038',
-    nextRun: 'On the next D365 update',
+    nextRun: 'On the next D365 F&O OneCore update',
     nextInMinutes: 6 * 60,
     on: true,
     recipients: ['Key User', 'QA Lead'],
@@ -95,7 +95,7 @@ export const SEED_SCHEDULES: Schedule[] = [
   {
     id: 'SCH-05',
     name: 'Yard app weekly',
-    what: 'Gate, weighbridge and mill confirmation',
+    what: 'Gate, weighbridge and Pegase confirmation',
     when: 'Weekly on Sunday',
     project: 'yard-app',
     scenarios: 6,

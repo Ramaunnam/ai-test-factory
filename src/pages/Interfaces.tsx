@@ -19,7 +19,7 @@ import {
   Switch,
 } from '@/components/ui'
 import { PageHeader } from '@/app/PageHeader'
-import { INTERFACES, PROCESSES, SYSTEMS } from '@/data'
+import { INTERFACES, PROCESSES, SYSTEMS, systemBySim } from '@/data'
 import { SourceNote } from '@/components/domain/SourceNote'
 import { engine } from '@/sim/engine'
 import { useSimVersion } from '@/sim/useSim'
@@ -135,8 +135,8 @@ export function InterfacesPage() {
 
   const activeChips: { label: string; clear: () => void }[] = [
     ...(q ? [{ label: `search “${q}”`, clear: () => setFilter('q', null) }] : []),
-    ...(from ? [{ label: `from ${SYSTEMS.find((s) => s.id === from)?.short ?? from}`, clear: () => setFilter('from', null) }] : []),
-    ...(to ? [{ label: `to ${SYSTEMS.find((s) => s.id === to)?.short ?? to}`, clear: () => setFilter('to', null) }] : []),
+    ...(from ? [{ label: `from ${SYSTEMS.find((s) => s.id === from)?.name ?? from}`, clear: () => setFilter('from', null) }] : []),
+    ...(to ? [{ label: `to ${SYSTEMS.find((s) => s.id === to)?.name ?? to}`, clear: () => setFilter('to', null) }] : []),
     ...(process ? [{ label: `workflow ${process}`, clear: () => setFilter('process', null) }] : []),
     ...statuses.map((s) => ({ label: STATUS_CHIPS.find((c) => c.key === s)?.label ?? s, clear: () => toggleStatus(s) })),
     ...(health ? [{ label: `health ${health}`, clear: () => setFilter('health', null) }] : []),
@@ -170,8 +170,8 @@ export function InterfacesPage() {
     return {
       ...i,
       ...t,
-      fromName: SYSTEMS.find((s) => s.id === i.from)?.short ?? i.from,
-      toName: SYSTEMS.find((s) => s.id === i.to)?.short ?? i.to,
+      fromName: SYSTEMS.find((s) => s.id === i.from)?.name ?? i.from,
+      toName: SYSTEMS.find((s) => s.id === i.to)?.name ?? i.to,
       kind: typeOf(i.id),
       format: formatOf(i.method),
       health: t.missing || t.mismatched || t.duplicated ? 'Problems' : t.sent ? 'Clean' : 'No traffic',
@@ -212,7 +212,7 @@ export function InterfacesPage() {
     const fields = Object.entries(payload).filter(([k]) => k !== 'interface')
     drawer.open({
       title: `${m.interfaceId} · field by field`,
-      subtitle: `${m.from} → ${m.to} · ${m.key}`,
+      subtitle: `${systemBySim(m.from).name} → ${systemBySim(m.to).name} · ${m.key}`,
       width: 'lg',
       content: (
         <div className="space-y-4">
@@ -226,8 +226,8 @@ export function InterfacesPage() {
             <thead>
               <tr className="border-b border-line text-label uppercase text-subtle">
                 <th className="py-1.5 text-left">Field</th>
-                <th className="py-1.5 text-left">Sent by {m.from}</th>
-                <th className="py-1.5 text-left">Stored by {m.to}</th>
+                <th className="py-1.5 text-left">Sent by {systemBySim(m.from).name}</th>
+                <th className="py-1.5 text-left">Stored by {systemBySim(m.to).name}</th>
               </tr>
             </thead>
             <tbody>

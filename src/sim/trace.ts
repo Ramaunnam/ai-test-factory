@@ -99,7 +99,7 @@ export function trace(raw: string): TraceResult {
     })
     if (afru) {
       const late = afru.delay_min > 15
-      if (late) problems.push(`the mill confirmation took ${afru.delay_min} minutes`)
+      if (late) problems.push(`the Pegase confirmation took ${afru.delay_min} minutes`)
       records.push({
         system: 'SAP Steel',
         table: 'AFRU',
@@ -125,7 +125,7 @@ export function trace(raw: string): TraceResult {
       records.push({
         system: 'Lasernet',
         table: 'output_document',
-        title: `Mill certificate ${cert.doc}`,
+        title: `Pegase certificate ${cert.doc}`,
         at: cert.created,
         flagged: false,
         fields: [
@@ -354,7 +354,7 @@ export function trace(raw: string): TraceResult {
     // P2 chain ----------------------------------------------------------
     const receipt = db.receipt.find((r) => r.gate_pass === key)
     if (gp.process === 'P2' && !receipt) {
-      problems.push('the receipt never reached Scrap Yard Operations')
+      problems.push('the receipt never reached dOps Core')
     }
     if (receipt) {
       records.push({
@@ -481,7 +481,7 @@ export function trace(raw: string): TraceResult {
             const notConverted = Math.abs(stock.qty * 1000 - b.weight_kg) <= 20
             if (notConverted) {
               problems.push(
-                `D365 holds ${stock.qty} ${stock.unit} for ${b.batch} instead of ${fmt(b.weight_kg)} kg`,
+                `D365 F&O OneCore holds ${stock.qty} ${stock.unit} for ${b.batch} instead of ${fmt(b.weight_kg)} kg`,
               )
             }
             records.push({

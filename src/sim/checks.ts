@@ -68,7 +68,7 @@ having count(m.mblnr) <> 1`,
   {
     id: 'C3',
     title: 'Every recycling load reached the scrap yard',
-    sentence: 'A load weighed at the gate must exist as a receipt in Scrap Yard Operations.',
+    sentence: 'A load weighed at the gate must exist as a receipt in dOps Core.',
     process: 'P2',
     stage: 'Gate receipt',
     interfaceId: 'IF-02',
@@ -115,12 +115,12 @@ where  c.batch is null or c.ni_pct is null or c.cr_pct is null or c.mo_pct is nu
   {
     id: 'C6',
     title: 'Stock in kilograms matches the tonnes received',
-    sentence: 'The yard receives tonnes. D365 must hold the same material in kilograms: tonnes × 1 000.',
+    sentence: 'The yard receives tonnes. D365 F&O OneCore must hold the same material in kilograms: tonnes × 1 000.',
     process: 'P2',
     stage: 'Stock posting',
     interfaceId: 'IF-03',
     systems: ['Scrap Yard', 'D365'],
-    columns: ['Batch', 'Received', 'Kilograms expected', 'Stock in D365', 'Journal'],
+    columns: ['Batch', 'Received', 'Kilograms expected', 'Stock in D365 F&O OneCore', 'Journal'],
     faults: ['F6'],
     sql: `select b.batch, b.weight_kg, s.qty, s.unit, s.journal
 from   scrap.scrap_batch b
@@ -130,12 +130,12 @@ where  s.journal is null or s.unit <> 'KG' or abs(s.qty - b.weight_kg) > 1`,
   {
     id: 'C6b',
     title: 'Issued kilograms never exceed stock',
-    sentence: 'The melt shop cannot take out more kilograms than D365 shows in stock for that batch.',
+    sentence: 'The melt shop cannot take out more kilograms than D365 F&O OneCore shows in stock for that batch.',
     process: 'P2',
     stage: 'Stock posting',
     interfaceId: 'IF-03',
     systems: ['Scrap Yard', 'D365'],
-    columns: ['Batch', 'Issued kg', 'Stock in D365', 'Unit', 'Over by'],
+    columns: ['Batch', 'Issued kg', 'Stock in D365 F&O OneCore', 'Unit', 'Over by'],
     faults: ['F6'],
     sql: `select i.batch, sum(i.qty_kg) as issued, s.qty, s.unit
 from   d365.issue i
@@ -179,7 +179,7 @@ where  d.doc is null`,
   },
   {
     id: 'C9',
-    title: 'Mill confirmations arrive within 15 minutes',
+    title: 'Pegase confirmations arrive within 15 minutes',
     sentence: 'A finished heat must be confirmed in SAP within 15 minutes, or the shift report is wrong.',
     process: 'P4',
     stage: 'Confirmation',
@@ -227,7 +227,7 @@ and    (f.rate is null or r.fx_rate_used <> f.rate)`,
   {
     id: 'C12',
     title: 'Transfers arrive with the same weight',
-    sentence: 'A batch moved between the two recycling yards must be booked in D365 with the weight it left with.',
+    sentence: 'A batch moved between the two recycling yards must be booked in D365 F&O OneCore with the weight it left with.',
     process: 'P2',
     stage: 'Yard transfer',
     interfaceId: 'IF-19',
@@ -241,7 +241,7 @@ where  t.received_kg is null or abs(t.received_kg - t.weight_kg) > 1`,
   {
     id: 'C13',
     title: 'Every tested batch has a quality order with the right result',
-    sentence: 'D365 must raise a quality order for every tested batch, and judge it against the window for its grade.',
+    sentence: 'D365 F&O OneCore must raise a quality order for every tested batch, and judge it against the window for its grade.',
     process: 'P2',
     stage: 'Stock posting',
     interfaceId: 'IF-03',
@@ -361,7 +361,7 @@ export function runCheck(id: string): CheckResult {
             ticket ? `${ticket.net_kg} ${ticket.unit}` : null,
             null,
           ],
-          why: 'The load was weighed at the gate but never reached Scrap Yard Operations.',
+          why: 'The load was weighed at the gate but never reached dOps Core.',
         })
       })
       break
@@ -433,10 +433,10 @@ export function runCheck(id: string): CheckResult {
             s?.journal ?? null,
           ],
           why: !s
-            ? 'Nothing was posted to D365 for this batch.'
+            ? 'Nothing was posted to D365 F&O OneCore for this batch.'
             : notConverted
               ? `Received ${tonnes} t, stock shows ${s.qty} ${s.unit} — not converted (should be ${fmt(b.weight_kg)} KG).`
-              : `D365 holds ${fmt(s.qty)} ${s.unit} against ${fmt(b.weight_kg)} kg received.`,
+              : `D365 F&O OneCore holds ${fmt(s.qty)} ${s.unit} against ${fmt(b.weight_kg)} kg received.`,
         })
       })
       break
@@ -462,7 +462,7 @@ export function runCheck(id: string): CheckResult {
           key: b ? (receiptKey.get(b.receipt) ?? batch) : batch,
           cells: [batch, issued, `${s.qty} ${s.unit}`, s.unit, Math.round(issued - s.qty)],
           why: notConverted
-            ? `The melt shop issued ${fmt(issued)} kg but D365 only shows ${s.qty} ${s.unit}, because the tonnes were never converted.`
+            ? `The melt shop issued ${fmt(issued)} kg but D365 F&O OneCore only shows ${s.qty} ${s.unit}, because the tonnes were never converted.`
             : `The melt shop issued ${fmt(issued)} kg against ${fmt(s.qty)} ${s.unit} in stock.`,
         })
       })
@@ -503,7 +503,7 @@ export function runCheck(id: string): CheckResult {
         rows.push({
           key: sp.batch,
           cells: [sp.journal, sp.batch, 'Self-billing document', null],
-          why: 'D365 booked the scrap purchase but Lasernet never produced the self-billing document.',
+          why: 'D365 F&O OneCore booked the scrap purchase but Lasernet never produced the self-billing document.',
         })
       })
       break
@@ -610,10 +610,10 @@ export function runCheck(id: string): CheckResult {
           key: c.batch,
           cells: [c.batch, grade, c.ni_pct, c.cr_pct, c.mo_pct, order?.order ?? null, order?.result ?? null],
           why: !order
-            ? 'The batch was tested but D365 never raised a quality order for it.'
+            ? 'The batch was tested but D365 F&O OneCore never raised a quality order for it.'
             : expected === 'Incomplete'
               ? 'The chemistry is incomplete, so the quality order cannot say whether the batch meets its grade.'
-              : `D365 recorded ${order.result}, but the measured values are ${expected} against the window for ${grade}` +
+              : `D365 F&O OneCore recorded ${order.result}, but the measured values are ${expected} against the window for ${grade}` +
                 (w ? ` (Ni ${w.ni[0].toFixed(2)}–${w.ni[1].toFixed(2)}).` : '.'),
         })
       })
