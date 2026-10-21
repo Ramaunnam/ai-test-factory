@@ -1,0 +1,12 @@
+1
+00:00:00,050 --> 00:00:03,298
+This is the J2W AI Test Factory.
+
+2
+00:00:03,298 --> 00:00:10,057
+It answers one question: can this application landscape be trusted enough to release, and to close the month on time?
+
+3
+00:00:10,057 --> 00:00:14,143
+Right now, that answer is a single measured number out of a hundred.
+

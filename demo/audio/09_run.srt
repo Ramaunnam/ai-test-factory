@@ -1,0 +1,20 @@
+1
+00:00:00,050 --> 00:00:03,391
+A run plays ten steps end to end across the whole journey.
+
+2
+00:00:03,391 --> 00:00:07,754
+One step heals itself, mapping a renamed field automatically.
+
+3
+00:00:07,754 --> 00:00:11,805
+One negative test is correctly blocked, which counts as a pass.
+
+4
+00:00:11,805 --> 00:00:16,296
+And one step genuinely fails, raising a finding live while it happens.
+
+5
+00:00:16,296 --> 00:00:20,092
+The verdict: conditional, not a blind green tick.
+

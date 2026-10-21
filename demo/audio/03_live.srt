@@ -1,0 +1,12 @@
+1
+00:00:00,050 --> 00:00:01,377
+This isn't a slide.
+
+2
+00:00:01,377 --> 00:00:06,631
+It's a steel and recycling plant, simulated live in the browser, on its own clock.
+
+3
+00:00:06,631 --> 00:00:11,701
+I can force a truck through the gate right now, and watch the counters move as it's weighed and booked.
+

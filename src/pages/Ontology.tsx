@@ -600,140 +600,133 @@ export function BusinessObjectsPage() {
           </div>
         </Card>
 
-        <Card className="min-w-0">
-          <CardBody className="space-y-5">
-            {/* ------------------------------------------------- the header */}
-            <div>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <Eyebrow>Object type</Eyebrow>
-                  <div className="mt-0.5 text-lg font-semibold text-text">{object.name}</div>
-                </div>
-                <Badge tone={statusTone(object.status)}>{object.status}</Badge>
-              </div>
-              <div className="mt-1 font-mono text-[11px] text-subtle">{object.technicalId}</div>
-              <p className="mt-2 text-xs text-muted">{object.what}</p>
-
-              <div className="mt-3 space-y-1.5 text-xs">
-                <div className="flex justify-between gap-3">
-                  <span className="shrink-0 text-muted">Grain</span>
-                  <span className="text-right font-medium text-text">{object.grain}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="shrink-0 text-muted">Primary key</span>
-                  <span className="text-right font-mono font-medium text-text">{object.primaryKey}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="shrink-0 text-muted">Live rows now</span>
-                  <span className="text-right font-mono font-medium text-text">{num(rows[object.id] ?? 0)}</span>
-                </div>
-              </div>
+        <Card className="min-w-0 p-6">
+          {/* ------------------------------------------------- the header */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <Eyebrow>Object type</Eyebrow>
+              <div className="mt-0.5 text-lg font-semibold text-text">{object.name}</div>
             </div>
+            <Badge tone={statusTone(object.status)}>
+              {object.status === 'Confirmed' && <CheckCircle2 size={10} />}
+              {object.status}
+            </Badge>
+          </div>
+          <div className="mt-1 font-mono text-[11px] text-subtle">{object.technicalId}</div>
+          <p className="mt-2 text-xs text-muted">{object.what}</p>
 
-            {/* --------------------------------------------- the properties */}
-            <div>
-              <Eyebrow className="mb-2">Properties</Eyebrow>
-              <div className="space-y-2.5">
-                {object.properties.map((f) => (
-                  <div key={f.name} className="border-b border-line pb-2 text-xs last:border-b-0 last:pb-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate font-mono font-medium text-text">{f.name}</span>
-                        {f.key && (
-                          <span
-                            title={f.key === 'PK' ? 'Primary key' : 'Points at another object'}
-                            className={cn(
-                              'rounded px-1 text-[9px] font-semibold',
-                              f.key === 'PK' ? 'bg-primary-soft text-primary' : 'bg-surface2 text-muted',
-                            )}
-                          >
-                            {f.key}
-                          </span>
+          <div className="mt-3 space-y-1.5 text-xs">
+            <div className="flex justify-between gap-3">
+              <span className="shrink-0 text-muted">Grain</span>
+              <span className="text-right font-medium text-text">{object.grain}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="shrink-0 text-muted">Primary key</span>
+              <span className="text-right font-mono font-medium text-text">{object.primaryKey}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="shrink-0 text-muted">Live rows now</span>
+              <span className="text-right font-mono font-medium text-text">{num(rows[object.id] ?? 0)}</span>
+            </div>
+          </div>
+
+          {/* --------------------------------------------- the properties */}
+          <Eyebrow className="mb-2 mt-5">Properties</Eyebrow>
+          <div className="space-y-2.5">
+            {object.properties.map((f) => (
+              <div key={f.name} className="border-b border-line pb-2 text-xs last:border-b-0 last:pb-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate font-mono font-medium text-text">{f.name}</span>
+                    {f.key && (
+                      <span
+                        title={f.key === 'PK' ? 'Primary key' : 'Points at another object'}
+                        className={cn(
+                          'rounded px-1 text-[9px] font-semibold',
+                          f.key === 'PK' ? 'bg-primary-soft text-primary' : 'bg-surface2 text-muted',
                         )}
+                      >
+                        {f.key}
                       </span>
-                      <span className="flex shrink-0 items-center gap-2">
-                        <span className="text-subtle">{f.type}</span>
-                        <StatusDot status={f.status} />
-                      </span>
-                    </div>
-                    <div className="mt-1 text-[11px] text-subtle">{f.means}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[10.5px] text-muted">{f.from}</span>
-                      {f.computedBy && <MetaChip title="Computed by a rule">ƒ computed by {f.computedBy}</MetaChip>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ------------------------------------ actions and functions */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Eyebrow className="mb-2">Action types</Eyebrow>
-                <div className="flex flex-wrap gap-1.5">
-                  {object.actions.length === 0 ? (
-                    <span className="text-xs text-muted">none</span>
-                  ) : (
-                    object.actions.map((a) => <MetaChip key={a}>{a}</MetaChip>)
-                  )}
-                </div>
-              </div>
-              <div>
-                <Eyebrow className="mb-2">Functions</Eyebrow>
-                <div className="flex flex-wrap gap-1.5">
-                  {object.functions.length === 0 ? (
-                    <span className="text-xs text-muted">none</span>
-                  ) : (
-                    object.functions.map((f) => <MetaChip key={f}>ƒ {f}</MetaChip>)
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* ------------------------------------------- the link graph */}
-            <div>
-              <Eyebrow className="mb-2">Link types</Eyebrow>
-              <LinkTypeGraph object={object} onSelect={setSelectedId} />
-            </div>
-
-            {/* ----------------------------------------- where it is bound */}
-            <div>
-              <Eyebrow className="mb-2">Data binding</Eyebrow>
-              <div className="space-y-1.5 rounded-md border border-line bg-surface2/60 p-2.5 text-xs">
-                <Bound label="System" value={object.source.system} />
-                <Bound label="Table" value={object.source.table ? TABLE_LABEL[object.source.table] : 'no table of its own'} mono />
-                <Bound label="Layer" value={object.source.layer} />
-                <Bound
-                  label="Interface"
-                  value={object.source.interfaceId ?? 'none'}
-                  mono
-                  onClick={
-                    object.source.interfaceId
-                      ? () => navigate(`/interfaces?interface=${object.source.interfaceId}`)
-                      : undefined
-                  }
-                />
-                <Bound label="Refresh" value={object.source.refresh} />
-                <div className="flex items-center justify-between gap-3">
-                  <span className="shrink-0 text-muted">Checks that guard it</span>
-                  <span className="flex flex-wrap justify-end gap-1.5">
-                    {object.source.checks.length === 0 ? (
-                      <span className="text-muted">none</span>
-                    ) : (
-                      object.source.checks.map((c) => (
-                        <Chip key={c} onClick={() => navigate('/flow/checks')}>
-                          {c}
-                        </Chip>
-                      ))
                     )}
                   </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="text-subtle">{f.type}</span>
+                    <StatusDot status={f.status} />
+                  </span>
                 </div>
-                <div className="pt-0.5">
-                  <Badge tone={statusTone(object.source.status)}>{object.source.status}</Badge>
+                <div className="mt-1 text-[11px] text-subtle">{f.means}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <span className="font-mono text-[10.5px] text-muted">{f.from}</span>
+                  {f.computedBy && <MetaChip title="Computed by a rule">ƒ computed by {f.computedBy}</MetaChip>}
                 </div>
               </div>
+            ))}
+          </div>
+
+          {/* ------------------------------------ actions and functions */}
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div>
+              <Eyebrow className="mb-2">Action types</Eyebrow>
+              <div className="flex flex-wrap gap-1.5">
+                {object.actions.length === 0 ? (
+                  <span className="text-xs text-muted">none</span>
+                ) : (
+                  object.actions.map((a) => <MetaChip key={a}>{a}</MetaChip>)
+                )}
+              </div>
             </div>
-          </CardBody>
+            <div>
+              <Eyebrow className="mb-2">Functions</Eyebrow>
+              <div className="flex flex-wrap gap-1.5">
+                {object.functions.length === 0 ? (
+                  <span className="text-xs text-muted">none</span>
+                ) : (
+                  object.functions.map((f) => <MetaChip key={f}>ƒ {f}</MetaChip>)
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ------------------------------------------- the link graph */}
+          <Eyebrow className="mb-2 mt-5">Link-type graph</Eyebrow>
+          <LinkTypeGraph object={object} onSelect={setSelectedId} />
+
+          {/* ----------------------------------------- where it is bound */}
+          <Eyebrow className="mb-2 mt-5">Data binding</Eyebrow>
+          <div className="space-y-1.5 rounded-md border border-line bg-surface2/60 p-2.5 text-xs">
+            <Bound label="System" value={object.source.system} />
+            <Bound label="Table" value={object.source.table ? TABLE_LABEL[object.source.table] : 'no table of its own'} mono />
+            <Bound label="Layer" value={object.source.layer} />
+            <Bound
+              label="Interface"
+              value={object.source.interfaceId ?? 'none'}
+              mono
+              onClick={
+                object.source.interfaceId
+                  ? () => navigate(`/interfaces?interface=${object.source.interfaceId}`)
+                  : undefined
+              }
+            />
+            <Bound label="Refresh" value={object.source.refresh} />
+            <div className="flex items-center justify-between gap-3">
+              <span className="shrink-0 text-muted">Checks that guard it</span>
+              <span className="flex flex-wrap justify-end gap-1.5">
+                {object.source.checks.length === 0 ? (
+                  <span className="text-muted">none</span>
+                ) : (
+                  object.source.checks.map((c) => (
+                    <Chip key={c} onClick={() => navigate('/flow/checks')}>
+                      {c}
+                    </Chip>
+                  ))
+                )}
+              </span>
+            </div>
+            <div className="pt-0.5">
+              <Badge tone={statusTone(object.source.status)}>{object.source.status}</Badge>
+            </div>
+          </div>
         </Card>
       </div>
     </>
@@ -874,7 +867,7 @@ function edges(
   return { a: { x: a.x + ux * back, y: a.y + uy * back }, b: { x: b.x - ux * back, y: b.y - uy * back } }
 }
 
-/** The relation name, with the cardinality written at each end of the line. */
+/** The relation name, in a chip at the middle of the line. */
 function LinkMarks({
   a,
   b,
@@ -888,38 +881,17 @@ function LinkMarks({
   cardinality: string
   accent?: boolean
 }) {
-  const [one, many] = cardinality.split('\u2192').map((v) => v.trim())
-  const at = (t: number) => ({ left: a.x + (b.x - a.x) * t, top: a.y + (b.y - a.y) * t })
-  // On a short link the two ends would sit under the name, so leave them off.
-  const room = Math.hypot(b.x - a.x, b.y - a.y) > 110
   return (
-    <>
-      <span
-        style={at(0.5)}
-        className={cn(
-          'pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded border px-1.5 py-px text-[11px] font-semibold shadow-sm',
-          accent ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-text',
-        )}
-      >
-        {label}
-      </span>
-      {room && (
-        <>
-          <span
-            style={at(0.08)}
-            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-muted"
-          >
-            {one}
-          </span>
-          <span
-            style={at(0.92)}
-            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-muted"
-          >
-            {many}
-          </span>
-        </>
+    <span
+      title={`${label} \u00b7 ${cardinality}`}
+      style={chipSpot(a, b, 0.5)}
+      className={cn(
+        'pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded border px-1.5 py-px text-[11px] font-semibold shadow-sm',
+        accent ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-text',
       )}
-    </>
+    >
+      {label}
+    </span>
   )
 }
 
@@ -936,9 +908,39 @@ function LinkMarks({
  * which can only add clearance.
  */
 const CARD = { w: 180, h: 94 }
-const CARD_GAP = 10
-const MARK_AT = 11 // how far along the line the cardinality is written
-const CANVAS = { w: 1240, h: 860 }
+const CARD_GAP = 8
+const CANVAS = { w: 1600, h: 960 }
+
+/**
+ * How far a name chip is pushed off its own line. On a short link the chip
+ * would otherwise cover the whole visible run of the line, arrowhead and all,
+ * which is exactly what makes a flow look like it has no direction.
+ */
+const CHIP_OFF = 14
+
+/** The chip's spot: along the line, then pushed clear of it. */
+function chipSpot(a: { x: number; y: number }, b: { x: number; y: number }, t: number) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len
+  const uy = dy / len
+  let px: number
+  let py: number
+  if (Math.abs(ux) < 0.2) {
+    // a near-vertical line: sit the chip beside it, never on it
+    px = 1
+    py = 0
+  } else {
+    px = -uy
+    py = ux
+    if (py > 0) {
+      px = -px
+      py = -py
+    }
+  }
+  return { left: a.x + dx * t + px * CHIP_OFF, top: a.y + dy * t + py * CHIP_OFF }
+}
 
 /** Green once the object is agreed, amber while it is still open. */
 function cardTone(status: ObjStatus) {
@@ -969,28 +971,38 @@ function OverviewCard({
       title={`${object.name} — ${object.grain}`}
       style={{ left: `${object.pos.x}%`, top: `${object.pos.y}%`, width: CARD.w, height: CARD.h }}
       className={cn(
-        'absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col justify-center gap-1 overflow-hidden',
-        'rounded-lg border-2 bg-surface px-3 text-left shadow-sm transition-shadow duration-150 hover:shadow-md',
-        selected ? 'border-primary shadow-md ring-2 ring-primary/20' : tone.border,
+        'absolute flex -translate-x-1/2 -translate-y-1/2 flex-col justify-center gap-1 overflow-hidden',
+        'rounded-lg border-2 px-3 text-left transition-shadow duration-150 hover:shadow-md',
+        selected
+          ? // where you are now: filled, not just outlined, so it is findable at a glance
+            'z-20 border-primary bg-primary text-primary-fg shadow-lg ring-4 ring-primary/25'
+          : cn('z-10 bg-surface shadow-sm', tone.border),
       )}
     >
       <span className="flex items-start gap-2">
-        <span className={cn('mt-[5px] h-2 w-2 shrink-0 rounded-full', selected ? 'bg-primary' : tone.dot)} />
+        <span
+          className={cn(
+            'mt-[5px] h-2 w-2 shrink-0 rounded-full',
+            selected ? 'bg-primary-fg' : tone.dot,
+          )}
+        />
         <span
           className={cn(
             'min-w-0 text-[16px] font-semibold leading-[19px]',
-            selected ? 'text-primary' : 'text-text',
+            selected ? 'text-primary-fg' : 'text-text',
           )}
         >
           {object.name}
         </span>
       </span>
-      <span className="pl-4 text-[11px] leading-[14px] text-subtle">{object.grain}</span>
+      <span className={cn('pl-4 text-[11px] leading-[14px]', selected ? 'text-primary-fg/80' : 'text-subtle')}>
+        {object.grain}
+      </span>
     </button>
   )
 }
 
-/** The link name in a chip, with the cardinality just outside each card. */
+/** The link name, in a chip at the middle of the line. */
 function OverviewLinkMarks({
   a,
   b,
@@ -1002,29 +1014,18 @@ function OverviewLinkMarks({
   link: ObjLink
   on: boolean
 }) {
-  const [one, many] = link.cardinality.split('→').map((v) => v.trim())
-  const at = (t: number) => ({ left: a.x + (b.x - a.x) * t, top: a.y + (b.y - a.y) * t })
-  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
-  const mark = 'pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 text-[11px] font-semibold text-muted'
   return (
-    <>
-      <span
-        style={at(link.at ?? 0.5)}
-        className={cn(
-          'pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap',
-          'rounded-full border px-2 py-[2px] text-[10.5px] font-medium shadow-sm',
-          on ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-muted',
-        )}
-      >
-        {link.label}
-      </span>
-      <span style={at(MARK_AT / len)} className={mark}>
-        {one}
-      </span>
-      <span style={at(1 - MARK_AT / len)} className={mark}>
-        {many}
-      </span>
-    </>
+    <span
+      title={`${link.label} · ${link.cardinality}`}
+      style={chipSpot(a, b, link.at ?? 0.5)}
+      className={cn(
+        'pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap',
+        'rounded-full border px-2 py-[2px] text-[11px] font-medium shadow-sm',
+        on ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-muted',
+      )}
+    >
+      {link.label}
+    </span>
   )
 }
 
@@ -1053,8 +1054,8 @@ function ModelOverview({ selectedId, onSelect }: { selectedId: string; onSelect:
       y1={d.e.a.y}
       x2={d.e.b.x}
       y2={d.e.b.y}
-      stroke={d.on ? t.primary : t['line-strong']}
-      strokeWidth={d.on ? 2.2 : 1.3}
+      stroke={d.on ? t.primary : t.subtle}
+      strokeWidth={d.on ? 2.6 : 1.8}
       markerEnd={d.on ? 'url(#ont-arrow-on)' : 'url(#ont-arrow)'}
     />
   )
@@ -1068,7 +1069,7 @@ function ModelOverview({ selectedId, onSelect }: { selectedId: string; onSelect:
         <svg className="absolute inset-0 h-full w-full overflow-visible">
           <defs>
             {[
-              { id: 'ont-arrow', fill: t['line-strong'] },
+              { id: 'ont-arrow', fill: t.subtle },
               { id: 'ont-arrow-on', fill: t.primary },
             ].map((m) => (
               <marker
@@ -1077,12 +1078,12 @@ function ModelOverview({ selectedId, onSelect }: { selectedId: string; onSelect:
                 viewBox="0 0 10 10"
                 refX="9"
                 refY="5"
-                markerWidth="8"
-                markerHeight="8"
+                markerWidth="13"
+                markerHeight="13"
                 markerUnits="userSpaceOnUse"
                 orient="auto-start-reverse"
               >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill={m.fill} />
+                <path d="M 0 0.5 L 10 5 L 0 9.5 z" fill={m.fill} />
               </marker>
             ))}
           </defs>
@@ -1144,8 +1145,17 @@ function LinkTypeGraph({ object, onSelect }: { object: BusinessObject; onSelect:
       >
         <svg className="absolute inset-0 h-full w-full overflow-visible">
           <defs>
-            <marker id="olg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={t.subtle} />
+            <marker
+              id="olg-arrow"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="12"
+              markerHeight="12"
+              markerUnits="userSpaceOnUse"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0.5 L 10 5 L 0 9.5 z" fill={t.subtle} />
             </marker>
           </defs>
           {size.w > 0 &&
@@ -1161,7 +1171,7 @@ function LinkTypeGraph({ object, onSelect }: { object: BusinessObject; onSelect:
                   y2={e.b.y}
                   stroke={t.subtle}
                   strokeOpacity={1}
-                  strokeWidth={1.8}
+                  strokeWidth={2}
                   markerEnd="url(#olg-arrow)"
                 />
               )

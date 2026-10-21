@@ -88,7 +88,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'yard.vehicle_master',
     primaryKey: 'vehicle',
     status: T,
-    pos: { x: 36, y: 10.1 },
+    pos: { x: 6, y: 23 },
     actions: ['Register vehicle', 'Re-weigh empty'],
     functions: ['Tare drift against the last weighings'],
     properties: [
@@ -114,7 +114,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'yard.gate_pass',
     primaryKey: 'gate_pass',
     status: C,
-    pos: { x: 34.4, y: 36.7 },
+    pos: { x: 23, y: 23 },
     actions: ['Create gate pass', 'Release vehicle'],
     functions: [],
     properties: [
@@ -145,7 +145,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'yard.weighbridge_ticket',
     primaryKey: 'ticket',
     status: C,
-    pos: { x: 59.7, y: 42 },
+    pos: { x: 40, y: 10 },
     actions: ['Confirm full weight', 'Confirm empty weight'],
     functions: ['Load = full − empty'],
     properties: [
@@ -178,7 +178,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'sap.lfa1',
     primaryKey: 'vendor',
     status: T,
-    pos: { x: 21, y: 8.1 },
+    pos: { x: 6, y: 75 },
     actions: ['Block for payment'],
     functions: ['VAT validation', 'Sanctions screening'],
     properties: [
@@ -205,7 +205,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'sap.ekpo',
     primaryKey: 'ebeln',
     status: C,
-    pos: { x: 8.1, y: 37 },
+    pos: { x: 23, y: 62 },
     actions: ['Approve order', 'Close order'],
     functions: [],
     properties: [
@@ -234,7 +234,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'sap.mseg',
     primaryKey: 'mblnr',
     status: C,
-    pos: { x: 8.1, y: 63.3 },
+    pos: { x: 40, y: 49 },
     actions: ['Book the delivery', 'Reverse the booking'],
     functions: ['Quantity from the weighbridge'],
     properties: [
@@ -265,7 +265,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'sap.rbkp',
     primaryKey: 'belnr',
     status: C,
-    pos: { x: 37.6, y: 69.5 },
+    pos: { x: 57, y: 75 },
     actions: ['Book invoice', 'Hold invoice', 'Release from hold'],
     functions: ['Invoice check', 'Convert at the day\'s rate'],
     properties: [
@@ -300,7 +300,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'reval.payment',
     primaryKey: 'pay',
     status: C,
-    pos: { x: 15, y: 88 },
+    pos: { x: 76, y: 88 },
     actions: ['Run payment', 'Stop payment'],
     functions: ['Hourly payment run'],
     properties: [
@@ -330,7 +330,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'lasernet.output_document',
     primaryKey: 'doc',
     status: C,
-    pos: { x: 92.2, y: 60.8 },
+    pos: { x: 94, y: 49 },
     actions: ['Render again'],
     functions: [],
     properties: [
@@ -359,7 +359,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'scrap.receipt',
     primaryKey: 'receipt',
     status: C,
-    pos: { x: 49.9, y: 56.2 },
+    pos: { x: 40, y: 23 },
     actions: ['Book the load'],
     functions: ['Tonnes to kilograms'],
     properties: [
@@ -390,7 +390,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'scrap.scrap_batch',
     primaryKey: 'batch',
     status: C,
-    pos: { x: 75, y: 55.9 },
+    pos: { x: 57, y: 36 },
     actions: ['Sort into batches', 'Label batch'],
     functions: ['Batch weights add back to the load'],
     properties: [
@@ -419,7 +419,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'lims.lab_result',
     primaryKey: 'sample',
     status: C,
-    pos: { x: 50, y: 90.5 },
+    pos: { x: 76, y: 10 },
     actions: ['Release result', 'Take another sample'],
     functions: [],
     properties: [
@@ -451,7 +451,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'd365.quality_order',
     primaryKey: 'order',
     status: P,
-    pos: { x: 71, y: 89.3 },
+    pos: { x: 76, y: 23 },
     actions: ['Confirm result', 'Override result'],
     functions: ['Grade from the chemistry'],
     properties: [
@@ -483,7 +483,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'd365.stock_posting',
     primaryKey: 'journal',
     status: C,
-    pos: { x: 31.9, y: 89.2 },
+    pos: { x: 76, y: 49 },
     actions: ['Post to stock', 'Issue to the melt shop'],
     functions: ['Tonnes × 1 000'],
     properties: [
@@ -515,7 +515,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'scrap.transfer',
     primaryKey: 'transfer',
     status: P,
-    pos: { x: 91.9, y: 89.3 },
+    pos: { x: 76, y: 36 },
     actions: ['Send the transfer', 'Book the arrival'],
     functions: [],
     properties: [
@@ -548,7 +548,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'mill.heat',
     primaryKey: 'heat',
     status: C,
-    pos: { x: 91.9, y: 10 },
+    pos: { x: 6, y: 88 },
     actions: ['Confirm heat'],
     functions: [],
     properties: [
@@ -576,7 +576,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'sap.afru',
     primaryKey: 'rueck',
     status: C,
-    pos: { x: 81.5, y: 38.1 },
+    pos: { x: 23, y: 88 },
     actions: ['Post the confirmation'],
     functions: ['Delay against the 15 minute rule'],
     properties: [
@@ -607,7 +607,7 @@ export const BUSINESS_OBJECTS: BusinessObject[] = [
     technicalId: 'd365.item',
     primaryKey: 'grade',
     status: T,
-    pos: { x: 64.2, y: 10.2 },
+    pos: { x: 6, y: 49 },
     actions: ['Maintain the grade window'],
     functions: [],
     properties: [
@@ -633,21 +633,21 @@ export const OBJECT_LINKS: ObjLink[] = [
   { from: 'gate-pass', to: 'goods-receipt', label: 'booked against', cardinality: '1 → 1' },
   { from: 'gate-pass', to: 'scrap-receipt', label: 'received as', cardinality: '1 → 1' },
   { from: 'vendor', to: 'purchase-order', label: 'supplies on', cardinality: '1 → *' },
-  { from: 'material', to: 'purchase-order', label: 'ordered as', cardinality: '1 → *', at: 0.63 },
+  { from: 'material', to: 'purchase-order', label: 'ordered as', cardinality: '1 → *' },
   { from: 'purchase-order', to: 'goods-receipt', label: 'booked against', cardinality: '1 → *' },
   { from: 'goods-receipt', to: 'supplier-invoice', label: 'matched to', cardinality: '1 → 1' },
   { from: 'supplier-invoice', to: 'payment', label: 'paid by', cardinality: '1 → 1' },
   { from: 'supplier-invoice', to: 'output-document', label: 'printed as', cardinality: '1 → 1' },
-  { from: 'vendor', to: 'payment', label: 'paid to', cardinality: '1 → *', at: 0.23 },
+  { from: 'vendor', to: 'payment', label: 'paid to', cardinality: '1 → *' },
   { from: 'scrap-receipt', to: 'scrap-batch', label: 'sorted into', cardinality: '1 → *' },
   { from: 'scrap-batch', to: 'lab-sample', label: 'tested by', cardinality: '1 → 1' },
   { from: 'scrap-batch', to: 'quality-order', label: 'judged by', cardinality: '1 → 1' },
   { from: 'scrap-batch', to: 'stock-posting', label: 'stocked as', cardinality: '1 → 1' },
   { from: 'scrap-batch', to: 'yard-transfer', label: 'transferred as', cardinality: '1 → *' },
-  { from: 'material', to: 'scrap-batch', label: 'graded as', cardinality: '1 → *', at: 0.56 },
-  { from: 'stock-posting', to: 'output-document', label: 'printed as', cardinality: '1 → 1', at: 0.3 },
+  { from: 'material', to: 'scrap-batch', label: 'graded as', cardinality: '1 → *' },
+  { from: 'stock-posting', to: 'output-document', label: 'printed as', cardinality: '1 → 1' },
   { from: 'heat', to: 'production-confirmation', label: 'confirmed by', cardinality: '1 → 1' },
-  { from: 'heat', to: 'output-document', label: 'printed as', cardinality: '1 → 1', at: 0.38 },
+  { from: 'heat', to: 'output-document', label: 'printed as', cardinality: '1 → 1' },
 ]
 
 export const OBJECT_BANDS: ObjBand[] = ['Yard & gate', 'Purchasing & finance', 'Recycling & quality', 'Pegase']

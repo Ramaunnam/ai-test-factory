@@ -1,0 +1,8 @@
+1
+00:00:00,050 --> 00:00:09,745
+That score is four weighted inputs: how many records agree across systems, the last test run, how many interface messages arrived undamaged, and what's still open.
+
+2
+00:00:09,745 --> 00:00:14,409
+And the same formula ranks what to fix first, by the points each fix would actually add.
+

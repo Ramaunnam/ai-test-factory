@@ -1,0 +1,12 @@
+1
+00:00:00,050 --> 00:00:03,753
+Rules written in plain business language compare that data live.
+
+2
+00:00:03,753 --> 00:00:10,416
+This one doesn't just flag a mismatch, it names the cause: a weight sent in kilograms, booked as tonnes.
+
+3
+00:00:10,416 --> 00:00:14,398
+Every failing row explains itself, down to the query behind it.
+

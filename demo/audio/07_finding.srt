@@ -1,0 +1,8 @@
+1
+00:00:00,050 --> 00:00:04,641
+One click turns a failing check into a finding, with its evidence attached.
+
+2
+00:00:04,641 --> 00:00:10,532
+And from there, a single load can be traced through every system it touched, in the order it actually happened.
+

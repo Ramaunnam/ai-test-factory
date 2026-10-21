@@ -1,0 +1,60 @@
+{
+ "01_title": {
+  "dur": 3
+ },
+ "02_question": {
+  "dur": 14.208,
+  "srt": "audio/02_question.srt",
+  "mp3": "audio/02_question.mp3"
+ },
+ "03_live": {
+  "dur": 11.76,
+  "srt": "audio/03_live.srt",
+  "mp3": "audio/03_live.mp3"
+ },
+ "04_score": {
+  "dur": 14.472,
+  "srt": "audio/04_score.srt",
+  "mp3": "audio/04_score.mp3"
+ },
+ "05_flow": {
+  "dur": 13.56,
+  "srt": "audio/05_flow.srt",
+  "mp3": "audio/05_flow.mp3"
+ },
+ "06_checks": {
+  "dur": 14.448,
+  "srt": "audio/06_checks.srt",
+  "mp3": "audio/06_checks.mp3"
+ },
+ "07_finding": {
+  "dur": 10.584,
+  "srt": "audio/07_finding.srt",
+  "mp3": "audio/07_finding.mp3"
+ },
+ "08_fix": {
+  "dur": 12.336,
+  "srt": "audio/08_fix.srt",
+  "mp3": "audio/08_fix.mp3"
+ },
+ "09_run": {
+  "dur": 20.16,
+  "srt": "audio/09_run.srt",
+  "mp3": "audio/09_run.mp3"
+ },
+ "10_simulator": {
+  "dur": 12.72,
+  "srt": "audio/10_simulator.srt",
+  "mp3": "audio/10_simulator.mp3"
+ },
+ "11_release": {
+  "dur": 14.04,
+  "srt": "audio/11_release.srt",
+  "mp3": "audio/11_release.mp3"
+ },
+ "12_close": {
+  "dur": 4.416,
+  "srt": "audio/12_close.srt",
+  "mp3": "audio/12_close.mp3"
+ }
+}
