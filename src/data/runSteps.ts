@@ -1,4 +1,5 @@
 import type { StepOutcome, StepScreen } from '@/components/domain/StepScreenshot'
+import { SCENARIOS, type Scenario } from './index'
 
 export interface RunLogLine {
   /** Time from the start of the run. */
@@ -18,6 +19,8 @@ export interface RunStep {
   /** The drawn mock of the screen this step touched. */
   screen: StepScreen
   logs: RunLogLine[]
+  /** An existing finding this step's failure is already explained by, so a run does not raise a duplicate. */
+  findingId?: string
 }
 
 /** The scripted P1 demo run. Every step carries its screen and its log. */
@@ -149,6 +152,7 @@ export const RUN_STEPS: RunStep[] = [
     outcome: 'fail',
     detail:
       'Three trucks were booked with the wrong weight. Two are a kilogram / tonne mix-up and one used a stale tare. Raised as finding F-001.',
+    findingId: 'F-001',
     technical: 'expect(abs(net_kg - menge)).toBeLessThan(20)',
     screen: {
       system: 'SAP S/4HANA Stainless',
@@ -266,3 +270,71 @@ export const RUN_STEPS: RunStep[] = [
 
 export const RUN_STEP_COUNT = RUN_STEPS.length
 export const RUN_LOG_COUNT = RUN_STEPS.reduce((n, s) => n + s.logs.length, 0)
+
+/**
+ * A scenario with no hand-written run steps above still needs a step-by-step
+ * run: one is drawn from its own steps, with a screen and a log per step, and
+ * the last step carries the scenario's own result.
+ */
+function synthesizeRunSteps(sc: Scenario): RunStep[] {
+  const lastIndex = sc.steps.length - 1
+  return sc.steps.map((st, i): RunStep => {
+    const isLast = i === lastIndex
+    let outcome: StepOutcome = 'pass'
+    let detail: string | undefined
+    if (isLast) {
+      if (sc.lastResult === 'Fail') {
+        outcome = 'fail'
+        detail = `${sc.name} did not pass on this step.`
+      } else if (sc.lastResult === 'Healed') {
+        outcome = 'healed'
+        detail = 'Self-healing repaired this step and the run continued.'
+      } else if (sc.type === 'Negative') {
+        outcome = 'blocked'
+        detail = 'Blocked as expected.'
+      }
+    }
+    const result = outcome === 'fail' ? 'FAIL' : outcome === 'blocked' ? 'blocked as expected' : outcome === 'healed' ? 'healed' : 'pass'
+    return {
+      scenario: sc.id,
+      stageId: sc.stageId,
+      text: st.text,
+      system: st.system,
+      outcome,
+      detail,
+      technical: st.technical,
+      screen: {
+        system: st.system,
+        title: `${st.system} · ${sc.id} step ${st.n}`,
+        fields: [{ label: 'Check', value: st.technical, highlight: isLast, wrong: outcome === 'fail' }],
+        banner:
+          outcome === 'blocked'
+            ? { tone: 'success', text: 'Blocked as expected' }
+            : outcome === 'fail'
+              ? { tone: 'danger', text: detail ?? 'Step failed' }
+              : undefined,
+      },
+      logs: [{ at: `00:0${Math.min(st.n, 9)}.0`, action: st.text, result }],
+    }
+  })
+}
+
+/**
+ * The run steps for exactly the scenarios chosen, in the order chosen,
+ * reusing the hand-written steps where they exist. No selection returns the
+ * default P1 demo run unchanged.
+ */
+export function buildRunSteps(ids?: string[], extraScenarios: Scenario[] = []): RunStep[] {
+  if (!ids || ids.length === 0) return RUN_STEPS
+  const out: RunStep[] = []
+  for (const id of ids) {
+    const written = RUN_STEPS.filter((s) => s.scenario === id)
+    if (written.length > 0) {
+      out.push(...written)
+      continue
+    }
+    const sc = SCENARIOS.find((s) => s.id === id) ?? extraScenarios.find((s) => s.id === id)
+    if (sc) out.push(...synthesizeRunSteps(sc))
+  }
+  return out
+}

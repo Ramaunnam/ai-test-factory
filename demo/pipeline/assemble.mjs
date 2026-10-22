@@ -88,5 +88,6 @@ const total = +d.trim();
 await sh(['-y', '-i', 'out/joined.mp4',
   '-vf', `fade=t=in:st=0:d=0.7:color=${FADE},fade=t=out:st=${(total - 1.4).toFixed(2)}:d=1.4:color=${FADE}`,
   '-af', `loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=out:st=${(total - 1.2).toFixed(2)}:d=1.2`,   // speech mastered to -16 LUFS
+  '-r', String(FPS), '-fps_mode', 'cfr',   // force exact 25/1 CFR; concat+fade otherwise lands on 299/12
   '-c:v', 'libx264', '-preset', 'slow', '-crf', '22', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', FINAL]);
 console.log(`\nDONE ${FINAL}  ${Math.floor(total / 60)}m ${Math.round(total % 60)}s  (${total.toFixed(1)}s)`);

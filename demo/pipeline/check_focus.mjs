@@ -29,68 +29,72 @@ await p.goto(APP.base + '/', { waitUntil: 'networkidle' });
 await p.waitForSelector(APP.ready);
 await sleep(1000);
 // ---- the story as fast Playwright calls, with check('targetName') wherever a target is used ----
-await p.keyboard.press('Control+K');
-await sleep(300);
-await p.keyboard.type('faults on');
-await sleep(300);
-await p.keyboard.press('Enter');
-await sleep(400);
-await p.getByRole('link', { name: 'Command Centre' }).click();
-await sleep(500);
-
-await check('gauge');
-await p.getByRole('button', { name: 'Send a truck' }).click();
-await sleep(1200);
-await check('sendTruck');
-
-await p.getByText('Show the full calculation').click();
-await sleep(400);
-await check('scoreCalc');
-await p.keyboard.press('Escape');
-await sleep(400);
-await check('whatNext');
-
-await p.getByRole('link', { name: /Live Data Flow/ }).click();
+await p.getByRole('link', { name: 'Testing Journey' }).click();
+await sleep(900);
+await check('journeySteps');
+await check('requirements');
+await p.getByRole('button', { name: /ADV-01/ }).click();
 await sleep(600);
+await p.getByRole('button', { name: /^1\s*\|?\s*Learn the process/ }).first().click();
+await sleep(600);
+await check('stepDetail');
+await check('truckJourney');
 
-await p.getByRole('tab', { name: 'Live Checks' }).click();
-await sleep(500);
-await check('checksC1');
-await check('checksQuery');
-await p.getByText('Show the query').first().click();
+await p.getByRole('button', { name: /Open this step in the app/ }).click();
+await sleep(1100);
+await check('discoveryIn');
 
-await check('raiseFinding');
-await p.getByRole('button', { name: 'Raise finding' }).first().click();
-await sleep(700);
-await p.locator('.bg-surface', { hasText: 'Records affected' }).locator('button').first().click();
-await sleep(800);
-
-await p.getByRole('tab', { name: 'Live Checks' }).click();
-await sleep(500);
-await p.getByRole('button', { name: 'Fix the cause and replay' }).first().click();
-await sleep(1200);
-await check('fixCause');
+await p.getByRole('link', { name: 'Test Studio' }).click();
+await sleep(900);
+await check('studioRule');
 
 await p.getByRole('link', { name: 'Run Centre' }).click();
-await sleep(500);
-await check('runDemo');
-await p.getByRole('button', { name: 'Run the P1 demo now' }).click();
 await sleep(800);
+await p.getByRole('button', { name: 'Run the P1 demo now' }).click();
+await sleep(4000);
+await check('runStrip');
+await sleep(13000);          // let the run reach its verdict
+await check('runVerdict');
 
-await p.getByRole('button', { name: /Key User/ }).click();
-await sleep(300);
-await p.getByRole('menuitem', { name: /Plant Head/ }).click();
+await p.getByRole('link', { name: /Live Data Flow/ }).click();
+await sleep(800);
+await p.getByRole('tab', { name: 'Live Checks' }).click();
+await sleep(800);
+await check('checksC1');
+await p.getByText('How this works').first().click();
 await sleep(900);
-await p.getByRole('button', { name: 'Simulate impact' }).click();
-await sleep(1500);
-await check('simulate');
+await check('drawer');
+await p.keyboard.press('Escape');
+await sleep(400);
 
-await p.getByRole('button', { name: /Plant Head/ }).click();
-await sleep(300);
-await p.getByRole('menuitem', { name: 'Key User' }).click();
+await p.getByRole('link', { name: 'Interface Testing' }).click();
+await sleep(1100);
+await check('interfaceTbl');
+await p.getByRole('link', { name: 'Command Centre' }).click();
+await sleep(800);
+await p.getByRole('tab', { name: 'Month-End Load' }).click();
+await sleep(1000);
+await p.getByRole('button', { name: '5x', exact: true }).click();
 await sleep(500);
+await p.getByRole('button', { name: 'Run load test' }).first().click();
+await sleep(6000);          // the profile ramps up over the first seconds
+await check('loadMetrics');
+await check('loadBreaks');
+
+await p.getByRole('link', { name: /Roles & SoD/ }).click();
+await sleep(1100);
+await check('sodMatrix');
+await p.getByRole('link', { name: /Change & Regression/ }).click();
+await sleep(900);
+await p.getByRole('tab', { name: 'Migration Reconciliation' }).click();
+await sleep(1000);
+await check('reconList');
+
+await p.getByRole('link', { name: 'Command Centre' }).click();
+await sleep(800);
 await p.getByRole('tab', { name: 'Release & Close' }).click();
-await sleep(500);
-await check('gateDecision');
+await sleep(800);
+await check('gateVerdict');
+await check('exitCriteria');
 console.log(`\n${bad} target(s) need attention`);
 await b.close();

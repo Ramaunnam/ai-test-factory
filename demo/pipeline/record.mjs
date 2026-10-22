@@ -178,8 +178,18 @@ await page.waitForSelector(APP.ready);
 await page.waitForTimeout(1500);
 await cover(true);
 await page.waitForTimeout(500);
-// A one-frame magenta flash marks the start of the take, so scene times can be mapped onto the recording.
-await page.evaluate(() => { const f = document.createElement('div'); f.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:#ff00ff'; document.body.appendChild(f); setTimeout(() => f.remove(), 240); });
+// A magenta flash marks the start of the take, so scene times can be mapped onto the recording.
+// Held for 900ms and repainted every 90ms: a short static flash is missed entirely by Chrome's
+// screencast when the page is otherwise still, which leaves the master with no marker at all.
+// It lands inside the title scene, whose footage the assembler replaces with the card still anyway.
+await page.evaluate(() => {
+  const f = document.createElement('div');
+  f.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:#ff00ff';
+  document.body.appendChild(f);
+  let on = true;
+  const id = setInterval(() => { on = !on; f.style.background = on ? '#ff00ff' : '#f000f0'; }, 90);
+  setTimeout(() => { clearInterval(id); f.remove(); }, 900);
+});
 T0 = Date.now();
 await sleep(300);
 if (ONLY && !ONLY.includes(scenes[0].id)) await uncover();

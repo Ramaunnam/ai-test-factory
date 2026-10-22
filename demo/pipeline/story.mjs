@@ -1,115 +1,147 @@
 // Scene ids are single-quoted keys: verify_cues.mjs reads this file to check every at('phrase') is really spoken.
-// Sidebar items are React Router <Link>s (role=link); sub-tabs are <button role="tab">; ordinary
-// actions are <button role="button">. Mixing these up is the single easiest mistake in this app.
+//
+// Two app-specific rules worth knowing before editing this file:
+//  1. Sidebar items are React Router <Link>s (role=link); sub-tabs are <button role="tab">; ordinary
+//     actions are <button role="button">. Anything that opens a panel opens it as a right-hand
+//     [role=dialog] drawer, so the camera moves onto the drawer, never onto the trigger.
+//  2. Chrome's screencast only emits a frame when something on the page changes. After a navigation
+//     this app can sit perfectly still for the rest of a scene, and the recorder then keeps whatever
+//     frame it last captured -- which can be a half-painted one, leaving a blank-looking page for the
+//     whole scene. Every navigation below is followed by a pointer move, which repaints and forces a
+//     fresh, complete frame to be captured.
 export default ({ page, focus, unzoom, pointLoc, clickLoc, expectSeen, sleep }) => ({
-  // Fully hidden behind the title cover: guarantee a known starting state the same way the team's
-  // own DEMO-SCRIPT.md does before recording -- faults on, plant replayed.
-  '01_title': async () => {
-    await page.keyboard.press('Control+K');
-    await sleep(300);
-    await page.keyboard.type('faults on');
-    await sleep(300);
-    await page.keyboard.press('Enter');   // this command also navigates to /flow/checks
-    await sleep(400);
-    // back to the Command Centre for scene 2 -- a client-side nav, not page.goto, so the
-    // simulated engine state (just set up above) survives.
-    await clickLoc(page.getByRole('link', { name: 'Command Centre' }), 'command centre nav');
-    await sleep(300);
+  '02_what': async ({ at }) => {
+    await clickLoc(page.getByRole('link', { name: 'Testing Journey' }), 'testing journey nav');
+    await sleep(800);
+    await pointLoc(page.getByRole('button', { name: /Learn the process/ }).first(), 'the first step');
+    await at('in eight steps');
+    await focus('journeySteps');
   },
 
-  '02_question': async ({ at }) => {
-    await at('single measured number');
-    await focus('gauge');
-  },
-
-  '03_live': async ({ at }) => {
-    await at('force a truck');
-    await clickLoc(page.getByRole('button', { name: 'Send a truck' }), 'send a truck');
-    await sleep(1200);
-    await focus('sendTruck');
-  },
-
-  '04_score': async ({ at }) => {
-    await focus('gauge');
-    await at('four weighted inputs');
-    await clickLoc(page.getByText('Show the full calculation'), 'show the full calculation');
-    await sleep(400);
-    await focus('scoreCalc');
-    await at('ranks what to fix first');
+  '03_requirements': async ({ at }) => {
     unzoom();
-    await page.keyboard.press('Escape');   // the calculation opens a real dialog with a backdrop
-    await sleep(400);
-    await focus('whatNext');
+    await focus('requirements');
+    await at('Pick any one');
+    await clickLoc(page.getByRole('button', { name: /ADV-01/ }), 'a client requirement');
+    await sleep(600);
   },
 
-  '05_flow': async ({ at }) => {
+  '04_step': async ({ at }) => {
+    unzoom();
+    // back to step one: picking a requirement above re-selects the step that covers it, and this
+    // scene's narration is specifically about step one.
+    await clickLoc(page.getByRole('button', { name: /^1\s*\|?\s*Learn the process/ }).first(), 'step one');
+    await sleep(600);
+    await at('what the AI does');
+    await focus('stepDetail');
+  },
+
+  '05_truck': async ({ at }) => {
+    unzoom();
+    await at('follows it through all eight steps');
+    await focus('truckJourney');
+    await pointLoc(page.getByText('Follow one truck through the journey'), 'the truck journey');
+  },
+
+  '06_discovery': async ({ at }) => {
+    unzoom();
+    await clickLoc(page.getByRole('button', { name: /Open this step in the app/ }), 'open this step in the app');
+    await sleep(1000);
+    await pointLoc(page.getByText('What happens on this page'), 'the discovery inputs');
+    await at('groups the clicks');
+    await focus('discoveryIn');
+  },
+
+  '07_studio': async ({ at }) => {
+    unzoom();
+    await clickLoc(page.getByRole('link', { name: 'Test Studio' }), 'test studio nav');
+    await sleep(1000);
+    await pointLoc(page.getByText('Turn a business rule into a data check'), 'the rule box');
+    await at('plain English');
+    await focus('studioRule');
+  },
+
+  '08_run': async ({ at }) => {
+    unzoom();
+    await clickLoc(page.getByRole('link', { name: 'Run Centre' }), 'run centre nav');
+    await sleep(700);
+    await clickLoc(page.getByRole('button', { name: 'Run the P1 demo now' }), 'run the p1 demo now');
+    await at('heals itself');
+    await focus('runStrip');
+    await at('verdict is conditional');
+    await focus('runVerdict');
+  },
+
+  '09_checks': async ({ at }) => {
     unzoom();
     await clickLoc(page.getByRole('link', { name: /Live Data Flow/ }), 'flow nav');
     await sleep(600);
-    await at('real message in flight');   // stays wide: the moving dots are the point, not a push-in
-  },
-
-  '06_checks': async ({ at }) => {
-    unzoom();
     await clickLoc(page.getByRole('tab', { name: 'Live Checks' }), 'checks tab');
-    await sleep(500);
-    await focus('checksC1');
-    await at('names the cause');
-    await clickLoc(page.getByText('Show the query').first(), 'show the query');
-  },
-
-  '07_finding': async ({ at }) => {
-    unzoom();
-    await focus('raiseFinding');
-    await clickLoc(page.getByRole('button', { name: 'Raise finding' }).first(), 'raise finding');
     await sleep(700);
-    unzoom();   // the finding card is a full-page view with no card to climb to
-    await at('evidence attached');
-    await clickLoc(page.locator('.bg-surface', { hasText: 'Records affected' }).locator('button').first(), 'an affected gate-pass chip');
-    await sleep(500);
-  },
-
-  '08_fix': async ({ at }) => {
-    unzoom();
-    await clickLoc(page.getByRole('tab', { name: 'Live Checks' }), 'checks tab again');
-    await sleep(500);
+    await at('names the cause');
     await focus('checksC1');
-    await at('switch off the fault');
-    await clickLoc(page.getByRole('button', { name: 'Fix the cause and replay' }).first(), 'fix the cause and replay');
-    await sleep(1200);
+    await at('opens its own panel');
+    unzoom();
+    await clickLoc(page.getByText('How this works').first(), 'how this works');
+    await sleep(800);
+    await focus('drawer');
   },
 
-  '09_run': async ({ at }) => {
+  '10_interfaces': async ({ at }) => {
     unzoom();
-    await clickLoc(page.getByRole('link', { name: 'Run Centre' }), 'run centre nav');
-    await sleep(500);
-    await clickLoc(page.getByRole('button', { name: 'Run the P1 demo now' }), 'run the p1 demo now');
-    await sleep(800);   // stays wide: the workflow strip animating through its steps is the point
-    await at('conditional, not a blind green tick');
-  },
-
-  '10_simulator': async ({ at }) => {
-    unzoom();
-    await clickLoc(page.getByRole('button', { name: /Key User/ }), 'role menu');
-    await sleep(300);
-    await clickLoc(page.getByRole('menuitem', { name: /Plant Head/ }), 'plant head');
+    await page.keyboard.press('Escape');   // close the drawer before navigating away from it
+    await sleep(400);
+    await clickLoc(page.getByRole('link', { name: 'Interface Testing' }), 'interface testing nav');
     await sleep(900);
-    await at('simulated before they ship');
-    await clickLoc(page.getByRole('button', { name: 'Simulate impact' }), 'simulate impact');
-    await sleep(1500);
-    await focus('simulate');
+    await pointLoc(page.getByText('Narrow it down'), 'the interface filters');
+    await at('field by field');
+    await focus('interfaceTbl');
   },
 
-  '11_release': async ({ at }) => {
+  // The load test is the one place with live numbers worth watching, so it is actually run here.
+  // It needs ~20s of its own: the profile ramps up over the first seconds and settles after that.
+  '11_load': async ({ at }) => {
     unzoom();
-    await clickLoc(page.getByRole('button', { name: /Plant Head/ }), 'role menu again');
-    await sleep(300);
-    await clickLoc(page.getByRole('menuitem', { name: 'Key User' }), 'back to key user');
+    await clickLoc(page.getByRole('link', { name: 'Command Centre' }), 'command centre nav');
+    await sleep(600);
+    await clickLoc(page.getByRole('tab', { name: 'Month-End Load' }), 'month-end load tab');
+    await sleep(800);
+    await clickLoc(page.getByRole('button', { name: '5x', exact: true }), 'the 5x profile');
     await sleep(500);
-    await clickLoc(page.getByRole('tab', { name: 'Release & Close' }), 'release nav');
-    await sleep(500);
-    await focus('gateDecision');
-    await at('designed, not just inverted');
+    await clickLoc(page.getByRole('button', { name: 'Run load test' }).first(), 'run load test');
+    await at('error rate climb');
+    await focus('loadMetrics');
+    await at('Invoice capture gives way first');
+    await focus('loadBreaks');
+  },
+
+  '12_governance': async ({ at }) => {
+    unzoom();
+    await clickLoc(page.getByRole('link', { name: /Roles & SoD/ }), 'roles and sod nav');
+    await sleep(900);
+    await pointLoc(page.getByText('Conflict matrix'), 'the conflict matrix');
+    await at('actually attempted');
+    await focus('sodMatrix');
+    await at('migration reconciliation compares');
+    unzoom();
+    await clickLoc(page.getByRole('link', { name: /Change & Regression/ }), 'change and regression nav');
+    await sleep(700);
+    await clickLoc(page.getByRole('tab', { name: 'Migration Reconciliation' }), 'migration reconciliation tab');
+    await sleep(800);
+    await focus('reconList');
+  },
+
+  '13_gate': async ({ at }) => {
+    unzoom();
+    await clickLoc(page.getByRole('link', { name: 'Command Centre' }), 'command centre nav');
+    await sleep(600);
+    await clickLoc(page.getByRole('tab', { name: 'Release & Close' }), 'release tab');
+    await sleep(800);
+    await pointLoc(page.getByText('Exit criteria').first(), 'the exit criteria');
+    await focus('gateVerdict');
+    await at('not met is named');
+    await focus('exitCriteria');
+    await at('re-colours in dark mode');
     unzoom();
     await page.keyboard.press('Shift+D');
     await sleep(700);

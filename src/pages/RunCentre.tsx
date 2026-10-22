@@ -37,8 +37,9 @@ import { PageHeader } from '@/app/PageHeader'
 import { JourneyBar } from '@/components/domain/JourneyBar'
 import { WorkflowFlow, type StageMark } from '@/components/domain/WorkflowFlow'
 import { SourceNote } from '@/components/domain/SourceNote'
-import { PROCESSES, RUNS, SCENARIOS } from '@/data'
-import { RUN_STEPS as DEMO_STEPS } from '@/data/runSteps'
+import { PROCESSES, RUNS, SCENARIOS, processById } from '@/data'
+import { buildRunSteps } from '@/data/runSteps'
+import type { RunStep } from '@/data/runSteps'
 import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { store, useStore } from '@/data/appStore'
 import {
@@ -76,16 +77,27 @@ export function RunCentrePage() {
   const [cursor, setCursor] = useState(-1)
   const [running, setRunning] = useState(false)
   const [runId, setRunId] = useState<string | null>(null)
+  const [runScenarioIds, setRunScenarioIds] = useState<string[] | null>(null)
+  const [runFindingIds, setRunFindingIds] = useState<string[]>([])
+  const [stepFindingId, setStepFindingId] = useState<Record<number, string>>({})
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [shot, setShot] = useState<number | null>(null)
-  const findingRaised = useRef(false)
+  const raisedForStep = useRef<Set<number>>(new Set())
+  const runFindingIdsRef = useRef<string[]>([])
   const scheduleRef = useRef<string | null>(null)
   const { matches, withProject } = useProjectFilter()
+
+  const steps: RunStep[] = useMemo(
+    () => buildRunSteps(runScenarioIds ?? undefined, appState.recordedScenarios),
+    [runScenarioIds, appState.recordedScenarios],
+  )
 
   const filtered = SCENARIOS.filter(
     (s) => s.process === processFilter && (typeFilter === 'All' || s.type === typeFilter),
   ).filter((s) => matches(projectOfSystems(s.systems)))
 
-  const start = () => {
+  /** Start a run. With no ids, this is the default P1 demo run. */
+  const start = (ids?: string[]) => {
     if (def.readOnly) {
       toast({
         title: 'This view is read only',
@@ -94,7 +106,11 @@ export function RunCentrePage() {
       })
       return
     }
-    findingRaised.current = false
+    raisedForStep.current = new Set()
+    runFindingIdsRef.current = []
+    setRunFindingIds([])
+    setStepFindingId({})
+    setRunScenarioIds(ids && ids.length ? ids : null)
     setRunId(`RUN-${1043 + appState.runs.length}`)
     setCursor(0)
     setRunning(true)
@@ -103,13 +119,16 @@ export function RunCentrePage() {
   useEffect(() => {
     const demo = params.get('demo')
     const schedule = params.get('schedule')
-    if (!demo && !schedule) return
+    const scenario = params.get('scenario') ?? params.get('scenarios')
+    if (!demo && !schedule && !scenario) return
     scheduleRef.current = schedule
     const next = new URLSearchParams(params)
     next.delete('demo')
     next.delete('schedule')
+    next.delete('scenario')
+    next.delete('scenarios')
     setParams(next, { replace: true })
-    start()
+    start(scenario ? scenario.split(',').map((s) => s.trim()).filter(Boolean) : undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params])
 
@@ -118,34 +137,64 @@ export function RunCentrePage() {
     const id = window.setTimeout(() => {
       setCursor((c) => {
         const next = c + 1
-        if (next >= DEMO_STEPS.length) {
+        if (next >= steps.length) {
           setRunning(false)
-          return DEMO_STEPS.length
+          return steps.length
         }
         return next
       })
     }, SPEED_MS[speed])
     return () => window.clearTimeout(id)
-  }, [running, cursor, speed])
+  }, [running, cursor, speed, steps])
 
-  const done = cursor >= DEMO_STEPS.length
-  const visible = DEMO_STEPS.slice(0, Math.max(0, Math.min(cursor + 1, DEMO_STEPS.length)))
+  const done = cursor >= steps.length
+  const visible = steps.slice(0, Math.max(0, Math.min(cursor + 1, steps.length)))
   const passed = visible.filter((s) => s.outcome === 'pass' || s.outcome === 'blocked').length
   const failed = visible.filter((s) => s.outcome === 'fail').length
   const healed = visible.filter((s) => s.outcome === 'healed').length
   const verdict = verdictOf(passed, failed, healed)
+  const runScenarioCount = new Set(steps.map((s) => s.scenario)).size
 
-  // raise the finding the moment the failing step runs
+  // raise a finding the moment each failing step runs (reusing one already written for it, if any)
   useEffect(() => {
-    if (findingRaised.current) return
-    const failedStep = visible.find((s) => s.outcome === 'fail')
-    if (!failedStep || !runId) return
-    findingRaised.current = true
-    toast({
-      title: 'Finding F-001 raised during the run',
-      description: '3 trucks were booked with the wrong weight.',
-      tone: 'danger',
-      action: { label: 'Open the finding', onClick: () => navigate('/finding/F-001') },
+    if (!runId) return
+    visible.forEach((s, i) => {
+      if (s.outcome !== 'fail' || raisedForStep.current.has(i)) return
+      raisedForStep.current.add(i)
+      if (s.findingId) {
+        if (!runFindingIdsRef.current.includes(s.findingId)) runFindingIdsRef.current = [...runFindingIdsRef.current, s.findingId]
+        setRunFindingIds((cur) => (cur.includes(s.findingId!) ? cur : [...cur, s.findingId!]))
+        setStepFindingId((cur) => ({ ...cur, [i]: s.findingId! }))
+        toast({
+          title: `Finding ${s.findingId} raised during the run`,
+          description: s.detail ?? `${s.scenario} failed on step ${i + 1}.`,
+          tone: 'danger',
+          action: { label: 'Open the finding', onClick: () => navigate(`/finding/${s.findingId}`) },
+        })
+        return
+      }
+      const id = store.addFinding({
+        title: `${s.scenario} failed: ${s.text}`,
+        severity: 'Critical',
+        status: 'Open',
+        process: s.stageId.split('-')[0],
+        stage: s.stageId,
+        system: s.system,
+        raised: new Date().toLocaleString('en-GB'),
+        raisedBy: 'Execution agent',
+        detail: s.detail ?? `Step "${s.text}" failed during ${runId}.`,
+        evidence: [`Run ${runId} step ${i + 1}`],
+        affectedKeys: [],
+      })
+      runFindingIdsRef.current = [...runFindingIdsRef.current, id]
+      setRunFindingIds((cur) => [...cur, id])
+      setStepFindingId((cur) => ({ ...cur, [i]: id }))
+      toast({
+        title: `Finding ${id} raised during the run`,
+        description: s.detail ?? `${s.scenario} failed on step ${i + 1}.`,
+        tone: 'danger',
+        action: { label: 'Open the finding', onClick: () => navigate(`/finding/${id}`) },
+      })
     })
   }, [visible, runId, toast, navigate])
 
@@ -156,18 +205,21 @@ export function RunCentrePage() {
     const startedBy = scheduleRef.current
     const schedule = startedBy ? appState.schedules.find((x) => x.id === startedBy) : undefined
     const when = new Date().toLocaleString('en-GB')
+    const processes = Array.from(new Set(steps.map((s) => s.stageId.split('-')[0])))
     store.addRun({
       id: runId,
       when,
       trigger: schedule ? `${schedule.name} (scheduled)` : 'Key user on demand',
-      scenarios: new Set(DEMO_STEPS.map((s) => s.scenario)).size,
+      scenarios: runScenarioCount,
       passed,
       failed,
       healed,
       verdict,
       duration: '2 min',
-      process: 'P1',
+      process: processes.length === 1 ? processes[0] : processes.join(', ') || 'P1',
       live: true,
+      scenarioIds: Array.from(new Set(steps.map((s) => s.scenario))),
+      findingIds: runFindingIdsRef.current,
     })
     if (schedule) {
       store.recordScheduleRun(schedule.id, runId, verdict, when)
@@ -188,24 +240,52 @@ export function RunCentrePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done, runId])
 
-  const marks = useMemo(() => {
-    const out: Record<string, StageMark> = {}
-    PROCESSES[0].stages.forEach((s) => {
-      out[s.id] = 'not in run'
+  /** The processes touched by this run's own steps, in the order first seen. */
+  const runProcessIds = useMemo(() => {
+    const seen: string[] = []
+    steps.forEach((s) => {
+      const pid = s.stageId.split('-')[0]
+      if (!seen.includes(pid)) seen.push(pid)
+    })
+    return seen.length ? seen : ['P1']
+  }, [steps])
+
+  /** One set of stage marks per process this run touches, so the strip only highlights this run's own workflow(s). */
+  const marksByProcess = useMemo(() => {
+    const out: Record<string, Record<string, StageMark>> = {}
+    runProcessIds.forEach((pid) => {
+      const m: Record<string, StageMark> = {}
+      processById(pid)?.stages.forEach((s) => {
+        m[s.id] = 'not in run'
+      })
+      out[pid] = m
     })
     visible.forEach((s, i) => {
+      const pid = s.stageId.split('-')[0]
+      const m = out[pid]
+      if (!m) return
       const isCurrent = i === visible.length - 1 && running
       if (isCurrent) {
-        out[s.stageId] = 'running'
+        m[s.stageId] = 'running'
         return
       }
-      const existing = out[s.stageId]
-      if (s.outcome === 'fail') out[s.stageId] = 'fail'
-      else if (s.outcome === 'healed' && existing !== 'fail') out[s.stageId] = 'healed'
-      else if (existing === 'not in run' || existing === undefined) out[s.stageId] = 'pass'
+      const existing = m[s.stageId]
+      if (s.outcome === 'fail') m[s.stageId] = 'fail'
+      else if (s.outcome === 'healed' && existing !== 'fail') m[s.stageId] = 'healed'
+      else if (existing === 'not in run' || existing === undefined) m[s.stageId] = 'pass'
     })
     return out
-  }, [visible, running])
+  }, [runProcessIds, visible, running])
+
+  /** What the run card header calls this run. */
+  const runTitle = useMemo(() => {
+    if (!runScenarioIds) return 'P1 Gate to Invoice'
+    if (runScenarioIds.length === 1) {
+      const sc = SCENARIOS.find((s) => s.id === runScenarioIds[0]) ?? appState.recordedScenarios.find((s) => s.id === runScenarioIds[0])
+      return sc ? `${sc.id} · ${sc.name}` : runScenarioIds[0]
+    }
+    return `${runScenarioIds.length} scenarios · ${runProcessIds.join(', ')}`
+  }, [runScenarioIds, runProcessIds, appState.recordedScenarios])
 
   const severityFilter = params.get('severity')
   const openFindings = appState.findings
@@ -225,7 +305,7 @@ export function RunCentrePage() {
             <Chip selected={speed === '1x'} onClick={() => setSpeed('1x')}>1x</Chip>
             <Chip selected={speed === '2x'} onClick={() => setSpeed('2x')}>2x</Chip>
             <Chip selected={speed === '4x'} onClick={() => setSpeed('4x')}>4x</Chip>
-            <Button variant="primary" leftIcon={<Play size={15} />} loading={running} onClick={start}>
+            <Button variant="primary" leftIcon={<Play size={15} />} loading={running} onClick={() => start()}>
               Run the P1 demo now
             </Button>
           </>
@@ -235,8 +315,8 @@ export function RunCentrePage() {
       {cursor >= 0 && (
         <Card className="mb-4" tone={done ? (verdict === 'FAIL' ? 'danger' : verdict === 'PASS' ? 'success' : 'warning') : 'default'}>
           <CardHeader
-            title={`${runId} · P1 Gate to Invoice`}
-            subtitle={running ? `Running step ${Math.min(cursor + 1, DEMO_STEPS.length)} of ${DEMO_STEPS.length}` : done ? 'Finished' : 'Ready'}
+            title={`${runId} · ${runTitle}`}
+            subtitle={running ? `Running step ${Math.min(cursor + 1, steps.length)} of ${steps.length}` : done ? 'Finished' : 'Ready'}
             actions={
               done && (
                 <>
@@ -245,7 +325,7 @@ export function RunCentrePage() {
                     variant="primary"
                     leftIcon={<FileLock2 size={15} />}
                     onClick={() => {
-                      const id = store.addEvidencePack(runId!, DEMO_STEPS.length)
+                      const id = store.addEvidencePack(runId!, steps.length)
                       toast({ title: `Evidence pack ${id} locked`, description: 'Hashed and ready for sign-off.', tone: 'success' })
                       navigate(`/evidence-pack/${runId}`)
                     }}
@@ -258,8 +338,23 @@ export function RunCentrePage() {
           />
           <CardBody className="space-y-4">
             <div>
-              <div className="mb-2 text-label font-semibold uppercase text-subtle">Workflow being tested</div>
-              <WorkflowFlow process={PROCESSES[0]} marks={marks} compact />
+              <div className="mb-2 text-label font-semibold uppercase text-subtle">
+                {runProcessIds.length > 1 ? 'Workflows being tested' : 'Workflow being tested'}
+              </div>
+              <div className="space-y-3">
+                {runProcessIds.map((pid) => {
+                  const proc = processById(pid)
+                  if (!proc) return null
+                  return (
+                    <div key={pid}>
+                      {runProcessIds.length > 1 && (
+                        <div className="mb-1 font-mono text-[11px] text-subtle">{pid} · {proc.name}</div>
+                      )}
+                      <WorkflowFlow process={proc} marks={marksByProcess[pid]} compact />
+                    </div>
+                  )
+                })}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -270,7 +365,7 @@ export function RunCentrePage() {
             </div>
 
             <div className="space-y-1.5">
-              {DEMO_STEPS.map((s, i) => {
+              {steps.map((s, i) => {
                 const state = i < cursor ? s.outcome : i === cursor ? (running ? 'running' : s.outcome) : 'waiting'
                 return (
                   <div
@@ -348,15 +443,43 @@ export function RunCentrePage() {
                         className="hidden sm:block"
                       />
                     )}
-                    {s.outcome === 'fail' && state === 'fail' && (
-                      <Button size="sm" variant="danger" onClick={() => navigate('/finding/F-001')}>
-                        F-001
+                    {s.outcome === 'fail' && state === 'fail' && stepFindingId[i] && (
+                      <Button size="sm" variant="danger" onClick={() => navigate(`/finding/${stepFindingId[i]}`)}>
+                        {stepFindingId[i]}
                       </Button>
                     )}
                   </div>
                 )
               })}
             </div>
+
+            {done && (
+              <div>
+                <div className="mb-2 text-label font-semibold uppercase text-subtle">Findings for this run</div>
+                {runFindingIds.length === 0 ? (
+                  <p className="text-sm text-muted">No findings for this run.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {runFindingIds.map((id) => {
+                      const f = appState.findings.find((x) => x.id === id)
+                      if (!f) return null
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => navigate(`/finding/${id}`)}
+                          className="flex w-full items-center gap-2 rounded-md border border-line px-3 py-2 text-left text-sm transition-colors hover:bg-surface2"
+                        >
+                          <span className="font-mono text-[11px] text-subtle">{f.id}</span>
+                          <span className="min-w-0 flex-1 truncate text-text">{f.title}</span>
+                          <Badge tone={f.severity === 'Critical' ? 'danger' : 'warning'}>{f.severity}</Badge>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </CardBody>
         </Card>
       )}
@@ -366,12 +489,17 @@ export function RunCentrePage() {
           title="Choose what to run"
           subtitle={`${filtered.length} of ${SCENARIOS.length} approved scenarios, filtered by workflow, by type and by the project in the header.`}
           actions={
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {(['All', 'Positive', 'Negative', 'Regression'] as const).map((t) => (
                 <Chip key={t} selected={typeFilter === t} onClick={() => setTypeFilter(t)}>
                   {t}
                 </Chip>
               ))}
+              {selectedIds.length > 0 && (
+                <Button size="sm" variant="primary" leftIcon={<Play size={13} />} onClick={() => start(selectedIds)}>
+                  Run {selectedIds.length} selected
+                </Button>
+              )}
             </div>
           }
         />
@@ -389,6 +517,25 @@ export function RunCentrePage() {
           maxHeight={360}
           empty="No approved scenario matches this workflow, type and project."
           columns={[
+            {
+              key: 'select',
+              header: '',
+              sortable: false,
+              width: 36,
+              render: (s) => (
+                <span onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-primary"
+                    checked={selectedIds.includes(s.id)}
+                    onChange={() =>
+                      setSelectedIds((cur) => (cur.includes(s.id) ? cur.filter((x) => x !== s.id) : [...cur, s.id]))
+                    }
+                    aria-label={`Select ${s.id}`}
+                  />
+                </span>
+              ),
+            },
             { key: 'id', header: 'Scenario', mono: true, width: 100 },
             { key: 'name', header: 'What it proves' },
             { key: 'type', header: 'Type', width: 120, render: (s) => <Badge tone={s.type === 'Negative' ? 'warning' : s.type === 'Regression' ? 'info' : 'success'}>{s.type}</Badge> },
@@ -409,13 +556,13 @@ export function RunCentrePage() {
               header: '',
               sortable: false,
               width: 70,
-              render: () => (
+              render: (s) => (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation()
-                    start()
+                    start([s.id])
                   }}
                 >
                   Run
@@ -430,12 +577,12 @@ export function RunCentrePage() {
         open={shot !== null}
         onClose={() => setShot(null)}
         width={760}
-        title={shot === null ? '' : `Step ${shot + 1} of ${DEMO_STEPS.length} · ${DEMO_STEPS[shot].text}`}
+        title={shot === null ? '' : `Step ${shot + 1} of ${steps.length} · ${steps[shot].text}`}
         subtitle={
           shot === null
             ? undefined
-            : `${DEMO_STEPS[shot].system} · ${DEMO_STEPS[shot].scenario} · ${
-                DEMO_STEPS[shot].outcome === 'blocked' ? 'blocked as expected' : DEMO_STEPS[shot].outcome
+            : `${steps[shot].system} · ${steps[shot].scenario} · ${
+                steps[shot].outcome === 'blocked' ? 'blocked as expected' : steps[shot].outcome
               }`
         }
         footer={
@@ -450,8 +597,8 @@ export function RunCentrePage() {
             <Button
               variant="primary"
               rightIcon={<ChevronRight size={15} />}
-              disabled={shot === DEMO_STEPS.length - 1}
-              onClick={() => setShot((i) => Math.min(DEMO_STEPS.length - 1, (i ?? 0) + 1))}
+              disabled={shot === steps.length - 1}
+              onClick={() => setShot((i) => Math.min(steps.length - 1, (i ?? 0) + 1))}
             >
               Next step
             </Button>
@@ -460,25 +607,25 @@ export function RunCentrePage() {
       >
         {shot !== null && (
           <div className="space-y-3">
-            <StepScreenshot screen={DEMO_STEPS[shot].screen} outcome={DEMO_STEPS[shot].outcome} variant="large" />
-            {DEMO_STEPS[shot].detail && (
+            <StepScreenshot screen={steps[shot].screen} outcome={steps[shot].outcome} variant="large" />
+            {steps[shot].detail && (
               <p
                 className={cn(
                   'text-sm',
-                  DEMO_STEPS[shot].outcome === 'fail'
+                  steps[shot].outcome === 'fail'
                     ? 'text-danger'
-                    : DEMO_STEPS[shot].outcome === 'healed'
+                    : steps[shot].outcome === 'healed'
                       ? 'text-accent'
                       : 'text-success',
                 )}
               >
-                {DEMO_STEPS[shot].detail}
+                {steps[shot].detail}
               </p>
             )}
             <div>
               <div className="mb-1.5 text-label font-semibold uppercase text-subtle">Log</div>
               <div className="space-y-0.5 rounded-md border border-line bg-surface2 px-3 py-2 font-mono text-[11.5px]">
-                {DEMO_STEPS[shot].logs.map((l) => (
+                {steps[shot].logs.map((l) => (
                   <div key={l.at} className="flex flex-wrap gap-x-3">
                     <span className="shrink-0 text-subtle">{l.at}</span>
                     <span className="min-w-0 flex-1 text-text">{l.action}</span>

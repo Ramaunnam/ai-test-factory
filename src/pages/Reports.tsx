@@ -3,8 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Badge, Button, Card, CardBody, CardHeader, DataTable, FieldGrid, StatTile } from '@/components/ui'
-import { CHANGES, PROCESSES, RUNS, SCENARIOS } from '@/data'
-import { RUN_LOG_COUNT, RUN_STEPS } from '@/data/runSteps'
+import { CHANGES, PROCESSES, RUNS, SCENARIOS, processById } from '@/data'
+import { RUN_LOG_COUNT, RUN_STEPS, buildRunSteps } from '@/data/runSteps'
 import { StepScreenshot } from '@/components/domain/StepScreenshot'
 import { store, useStore } from '@/data/appStore'
 import { WorkflowFlow } from '@/components/domain/WorkflowFlow'
@@ -190,7 +190,20 @@ export function RunReportPage() {
     )
   }
 
-  const scenarios = SCENARIOS.slice(0, run.scenarios)
+  // A run that named its own scenarios shows only those. One that did not (an older, pre-canned run) falls back to the old illustrative slice.
+  const scenarioPool = [...appState.recordedScenarios, ...SCENARIOS]
+  const scenarios = run.scenarioIds
+    ? run.scenarioIds.map((id) => scenarioPool.find((s) => s.id === id)).filter((s): s is (typeof scenarioPool)[number] => !!s)
+    : SCENARIOS.slice(0, run.scenarios)
+
+  const runSteps = run.scenarioIds ? buildRunSteps(run.scenarioIds, appState.recordedScenarios) : RUN_STEPS
+  const runProcessIds = run.scenarioIds
+    ? Array.from(new Set(runSteps.map((s) => s.stageId.split('-')[0])))
+    : [PROCESSES[0].id]
+
+  const findings = run.findingIds
+    ? appState.findings.filter((f) => run.findingIds!.includes(f.id))
+    : appState.findings.slice(0, 3)
 
   return (
     <ReportShell
@@ -217,14 +230,25 @@ export function RunReportPage() {
 
       <Card>
         <CardHeader title="Workflow coverage" subtitle="Which stages this run actually proved." />
-        <CardBody className="pt-4">
-          <WorkflowFlow
-            process={PROCESSES[0]}
-            marks={Object.fromEntries(
-              PROCESSES[0].stages.map((s, i) => [s.id, run.failed > 0 && i === 1 ? ('fail' as const) : ('pass' as const)]),
-            )}
-            compact
-          />
+        <CardBody className="space-y-3 pt-4">
+          {runProcessIds.map((pid) => {
+            const proc = processById(pid) ?? PROCESSES[0]
+            const marks = Object.fromEntries(
+              proc.stages.map((s) => {
+                const forStage = runSteps.filter((st) => st.stageId === s.id)
+                if (forStage.length === 0) return [s.id, 'not in run' as const]
+                if (forStage.some((st) => st.outcome === 'fail')) return [s.id, 'fail' as const]
+                if (forStage.some((st) => st.outcome === 'healed')) return [s.id, 'healed' as const]
+                return [s.id, 'pass' as const]
+              }),
+            )
+            return (
+              <div key={pid}>
+                {runProcessIds.length > 1 && <div className="mb-1 font-mono text-[11px] text-subtle">{pid} · {proc.name}</div>}
+                <WorkflowFlow process={proc} marks={marks} compact />
+              </div>
+            )
+          })}
         </CardBody>
       </Card>
 
@@ -255,7 +279,8 @@ export function RunReportPage() {
       <Card>
         <CardHeader title="Findings raised" />
         <CardBody className="space-y-2">
-          {appState.findings.slice(0, 3).map((f) => (
+          {findings.length === 0 && <p className="text-sm text-muted">No findings for this run.</p>}
+          {findings.map((f) => (
             <button
               key={f.id}
               type="button"
@@ -347,6 +372,8 @@ export function EvidencePackPage() {
   const appState = useStore()
   const pack = appState.evidencePacks.find((p) => p.runId === runId)
   const run = [...appState.runs, ...RUNS].find((r) => r.id === runId)
+  const packSteps = run?.scenarioIds ? buildRunSteps(run.scenarioIds, appState.recordedScenarios) : RUN_STEPS
+  const packLogCount = run?.scenarioIds ? packSteps.reduce((n, s) => n + s.logs.length, 0) : RUN_LOG_COUNT
 
   return (
     <ReportShell
@@ -377,7 +404,7 @@ export function EvidencePackPage() {
             <CardHeader title="What is inside" />
             <CardBody className="space-y-3">
               <p className="rounded-md border border-line bg-surface2/60 px-3 py-2 text-sm text-text">
-                Contains {RUN_STEPS.length} steps, {RUN_STEPS.length} screenshots, {RUN_LOG_COUNT} log lines.
+                Contains {packSteps.length} steps, {packSteps.length} screenshots, {packLogCount} log lines.
               </p>
               <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
                 <li>Every step with its result, timestamp and the system it ran against</li>
@@ -393,10 +420,10 @@ export function EvidencePackPage() {
           <Card>
             <CardHeader
               title="Every step, with its screenshot and log"
-              subtitle={`${RUN_STEPS.length} steps · ${RUN_LOG_COUNT} log lines · screens drawn from each step’s own values`}
+              subtitle={`${packSteps.length} steps · ${packLogCount} log lines · screens drawn from each step’s own values`}
             />
             <CardBody className="space-y-3">
-              {RUN_STEPS.map((s, i) => (
+              {packSteps.map((s, i) => (
                 <div key={`${s.scenario}-${i}`} className="rounded-md border border-line p-3">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <span className="font-mono text-[11px] text-subtle">{String(i + 1).padStart(2, '0')}</span>

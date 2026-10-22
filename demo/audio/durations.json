@@ -2,59 +2,69 @@
  "01_title": {
   "dur": 3
  },
- "02_question": {
-  "dur": 14.208,
-  "srt": "audio/02_question.srt",
-  "mp3": "audio/02_question.mp3"
+ "02_what": {
+  "dur": 15.744,
+  "srt": "audio/02_what.srt",
+  "mp3": "audio/02_what.mp3"
  },
- "03_live": {
-  "dur": 11.76,
-  "srt": "audio/03_live.srt",
-  "mp3": "audio/03_live.mp3"
+ "03_requirements": {
+  "dur": 12.624,
+  "srt": "audio/03_requirements.srt",
+  "mp3": "audio/03_requirements.mp3"
  },
- "04_score": {
-  "dur": 14.472,
-  "srt": "audio/04_score.srt",
-  "mp3": "audio/04_score.mp3"
+ "04_step": {
+  "dur": 12.096,
+  "srt": "audio/04_step.srt",
+  "mp3": "audio/04_step.mp3"
  },
- "05_flow": {
-  "dur": 13.56,
-  "srt": "audio/05_flow.srt",
-  "mp3": "audio/05_flow.mp3"
+ "05_truck": {
+  "dur": 13.656,
+  "srt": "audio/05_truck.srt",
+  "mp3": "audio/05_truck.mp3"
  },
- "06_checks": {
+ "06_discovery": {
+  "dur": 12.912,
+  "srt": "audio/06_discovery.srt",
+  "mp3": "audio/06_discovery.mp3"
+ },
+ "07_studio": {
+  "dur": 13.08,
+  "srt": "audio/07_studio.srt",
+  "mp3": "audio/07_studio.mp3"
+ },
+ "08_run": {
+  "dur": 18.336,
+  "srt": "audio/08_run.srt",
+  "mp3": "audio/08_run.mp3"
+ },
+ "09_checks": {
   "dur": 14.448,
-  "srt": "audio/06_checks.srt",
-  "mp3": "audio/06_checks.mp3"
+  "srt": "audio/09_checks.srt",
+  "mp3": "audio/09_checks.mp3"
  },
- "07_finding": {
-  "dur": 10.584,
-  "srt": "audio/07_finding.srt",
-  "mp3": "audio/07_finding.mp3"
+ "10_interfaces": {
+  "dur": 15.528,
+  "srt": "audio/10_interfaces.srt",
+  "mp3": "audio/10_interfaces.mp3"
  },
- "08_fix": {
-  "dur": 12.336,
-  "srt": "audio/08_fix.srt",
-  "mp3": "audio/08_fix.mp3"
+ "11_load": {
+  "dur": 22.776,
+  "srt": "audio/11_load.srt",
+  "mp3": "audio/11_load.mp3"
  },
- "09_run": {
-  "dur": 20.16,
-  "srt": "audio/09_run.srt",
-  "mp3": "audio/09_run.mp3"
+ "12_governance": {
+  "dur": 19.152,
+  "srt": "audio/12_governance.srt",
+  "mp3": "audio/12_governance.mp3"
  },
- "10_simulator": {
-  "dur": 12.72,
-  "srt": "audio/10_simulator.srt",
-  "mp3": "audio/10_simulator.mp3"
+ "13_gate": {
+  "dur": 20.496,
+  "srt": "audio/13_gate.srt",
+  "mp3": "audio/13_gate.mp3"
  },
- "11_release": {
-  "dur": 14.04,
-  "srt": "audio/11_release.srt",
-  "mp3": "audio/11_release.mp3"
- },
- "12_close": {
+ "14_close": {
   "dur": 4.416,
-  "srt": "audio/12_close.srt",
-  "mp3": "audio/12_close.mp3"
+  "srt": "audio/14_close.srt",
+  "mp3": "audio/14_close.mp3"
  }
 }

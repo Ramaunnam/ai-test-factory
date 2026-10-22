@@ -1,8 +1,0 @@
-1
-00:00:00,050 --> 00:00:05,046
-Switch to the plant head's own view, and the menu and the landing page change with the role.
-
-2
-00:00:05,046 --> 00:00:12,662
-Changes queued for this release can be simulated before they ship, and confidence would drop sharply if this one went out before the close.
-

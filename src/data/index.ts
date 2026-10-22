@@ -453,6 +453,9 @@ export interface HistoricRun {
   verdict: 'PASS' | 'CONDITIONAL' | 'FAIL'
   duration: string
   process: string
+  /** Pre-canned history carries no per-scenario breakdown, unlike a live run. */
+  scenarioIds?: string[]
+  findingIds?: string[]
 }
 
 export const RUNS: HistoricRun[] = [

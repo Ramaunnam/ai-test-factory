@@ -57,6 +57,10 @@ export interface RunRecord {
   duration: string
   process: string
   live?: boolean
+  /** The exact scenarios this run covered, in the order they ran. */
+  scenarioIds?: string[]
+  /** The findings this run raised, so its report shows only its own. */
+  findingIds?: string[]
 }
 
 interface State {
